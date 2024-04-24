@@ -9,7 +9,7 @@ from .gat import GAT
 from .gin import GIN
 from .loss_func import sce_loss
 from graphmae.utils import create_norm
-from torch_geometric.utils import dropout_edge
+from torch_geometric.utils import dropout_adj as dropout_edge
 from torch_geometric.utils import add_self_loops, remove_self_loops
 
 
