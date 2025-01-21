@@ -1,16 +1,11 @@
-from collections import namedtuple, Counter
-import numpy as np
-
 import torch
 import torch.nn.functional as F
-
 import torch_geometric.transforms as T
+from collections import Counter
+from ogb.nodeproppred import PygNodePropPredDataset
+from sklearn.preprocessing import StandardScaler
 from torch_geometric.datasets import Planetoid, TUDataset
 from torch_geometric.utils import add_self_loops, remove_self_loops, to_undirected, degree
-
-from ogb.nodeproppred import PygNodePropPredDataset
-
-from sklearn.preprocessing import StandardScaler
 
 
 def scale_feats(x):
@@ -58,14 +53,13 @@ def load_graph_classification_dataset(dataset_name, deg4feat=False):
     dataset = list(dataset)
     graph = dataset[0]
 
-
     if graph.x == None:
         if graph.y and not deg4feat:
             print("Use node label as node features")
             feature_dim = 0
             for g in dataset:
                 feature_dim = max(feature_dim, int(g.y.max().item()))
-            
+
             feature_dim += 1
             for i, g in enumerate(dataset):
                 node_label = g.y.view(-1)
@@ -101,12 +95,12 @@ def load_graph_classification_dataset(dataset_name, deg4feat=False):
     feature_dim = int(graph.num_features)
 
     labels = torch.tensor([x.y for x in dataset])
-    
+
     num_classes = torch.max(labels).item() + 1
     for i, g in enumerate(dataset):
         dataset[i].edge_index = remove_self_loops(dataset[i].edge_index)[0]
         dataset[i].edge_index = add_self_loops(dataset[i].edge_index)[0]
-    #dataset = [(g, g.y) for g in dataset]
+    # dataset = [(g, g.y) for g in dataset]
 
     print(f"******** # Num Graphs: {len(dataset)}, # Num Feat: {feature_dim}, # Num Classes: {num_classes} ********")
     return dataset, (feature_dim, num_classes)

@@ -1,31 +1,25 @@
 import argparse
-import copy
+import numpy as np
+import os
+import pandas as pd
+import shutil
+import torch
+import torch.multiprocessing
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import roc_auc_score
+from tensorboardX import SummaryWriter
+from torch_geometric.data import DataLoader
+from tqdm import tqdm
 
 from loader import MoleculeDataset
-from torch_geometric.data import DataLoader
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-
-from tqdm import tqdm
-import numpy as np
-
-from model import GNN, GNN_graphpred
-from sklearn.metrics import roc_auc_score
-
+from model import GNN_graphpred
 from splitters import scaffold_split
-import pandas as pd
 
-import os
-import shutil
-
-from tensorboardX import SummaryWriter
-import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-criterion = nn.BCEWithLogitsLoss(reduction = "none")
+criterion = nn.BCEWithLogitsLoss(reduction="none")
+
 
 def train(args, model, device, loader, optimizer):
     model.train()
@@ -35,15 +29,15 @@ def train(args, model, device, loader, optimizer):
         pred = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
         y = batch.y.view(pred.shape).to(torch.float64)
 
-        #Whether y is non-null or not.
-        is_valid = y**2 > 0
-        #Loss matrix
-        loss_mat = criterion(pred.double(), (y+1)/2)
-        #loss matrix after removing null target
+        # Whether y is non-null or not.
+        is_valid = y ** 2 > 0
+        # Loss matrix
+        loss_mat = criterion(pred.double(), (y + 1) / 2)
+        # loss matrix after removing null target
         loss_mat = torch.where(is_valid, loss_mat, torch.zeros(loss_mat.shape).to(loss_mat.device).to(loss_mat.dtype))
-            
+
         optimizer.zero_grad()
-        loss = torch.sum(loss_mat)/torch.sum(is_valid)
+        loss = torch.sum(loss_mat) / torch.sum(is_valid)
         loss.backward()
 
         optimizer.step()
@@ -64,22 +58,21 @@ def eval(args, model, device, loader):
         y_true.append(batch.y.view(pred.shape))
         y_scores.append(pred)
 
-    y_true = torch.cat(y_true, dim = 0).cpu().numpy()
-    y_scores = torch.cat(y_scores, dim = 0).cpu().numpy()
+    y_true = torch.cat(y_true, dim=0).cpu().numpy()
+    y_scores = torch.cat(y_scores, dim=0).cpu().numpy()
 
     roc_list = []
     for i in range(y_true.shape[1]):
-        #AUC is only defined when there is at least one positive data.
-        if np.sum(y_true[:,i] == 1) > 0 and np.sum(y_true[:,i] == -1) > 0:
-            is_valid = y_true[:,i]**2 > 0
-            roc_list.append(roc_auc_score((y_true[is_valid,i] + 1)/2, y_scores[is_valid,i]))
+        # AUC is only defined when there is at least one positive data.
+        if np.sum(y_true[:, i] == 1) > 0 and np.sum(y_true[:, i] == -1) > 0:
+            is_valid = y_true[:, i] ** 2 > 0
+            roc_list.append(roc_auc_score((y_true[is_valid, i] + 1) / 2, y_scores[is_valid, i]))
 
     if len(roc_list) < y_true.shape[1]:
         print("Some target is missing!")
-        print("Missing ratio: %f" %(1 - float(len(roc_list))/y_true.shape[1]))
+        print("Missing ratio: %f" % (1 - float(len(roc_list)) / y_true.shape[1]))
 
-    return sum(roc_list)/len(roc_list) #y_true.shape[1]
-
+    return sum(roc_list) / len(roc_list)  # y_true.shape[1]
 
 
 def main():
@@ -108,20 +101,21 @@ def main():
     parser.add_argument('--JK', type=str, default="last",
                         help='how the node features across layers are combined. last, sum, max or concat')
     parser.add_argument('--gnn_type', type=str, default="gin")
-    parser.add_argument('--dataset', type=str, default = 'tox21', help='root directory of dataset. For now, only classification.')
-    parser.add_argument('--input_model_file', type=str, default = '', help='filename to read the model (if there is any)')
-    parser.add_argument('--filename', type=str, default = '', help='output filename')
-    parser.add_argument('--seed', type=int, default=42, help = "Seed for splitting the dataset.")
-    parser.add_argument('--runseed', type=int, default=0, help = "Seed for minibatch selection, random initialization.")
-    parser.add_argument('--split', type = str, default="scaffold", help = "random or scaffold or random_scaffold")
-    parser.add_argument('--eval_train', type=int, default = 0, help='evaluating training or not')
-    parser.add_argument('--num_workers', type=int, default = 4, help='number of workers for dataset loading')
+    parser.add_argument('--dataset', type=str, default='tox21',
+                        help='root directory of dataset. For now, only classification.')
+    parser.add_argument('--input_model_file', type=str, default='', help='filename to read the model (if there is any)')
+    parser.add_argument('--filename', type=str, default='', help='output filename')
+    parser.add_argument('--seed', type=int, default=42, help="Seed for splitting the dataset.")
+    parser.add_argument('--runseed', type=int, default=0, help="Seed for minibatch selection, random initialization.")
+    parser.add_argument('--split', type=str, default="scaffold", help="random or scaffold or random_scaffold")
+    parser.add_argument('--eval_train', type=int, default=0, help='evaluating training or not')
+    parser.add_argument('--num_workers', type=int, default=4, help='number of workers for dataset loading')
     parser.add_argument('--scheduler', action="store_true", default=False)
     args = parser.parse_args()
 
     args.use_early_stopping = args.dataset in ("muv", "hiv")
     args.scheduler = args.dataset in ("bace")
-    
+
     torch.manual_seed(args.runseed)
     np.random.seed(args.runseed)
 
@@ -129,7 +123,7 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.runseed)
 
-    #Bunch of classification tasks
+    # Bunch of classification tasks
     if args.dataset == "tox21":
         num_tasks = 12
     elif args.dataset == "hiv":
@@ -151,14 +145,15 @@ def main():
     else:
         raise ValueError("Invalid dataset name.")
 
-    #set up dataset
+    # set up dataset
     dataset = MoleculeDataset("dataset/" + args.dataset, dataset=args.dataset)
 
     print(dataset)
-    
+
     if args.split == "scaffold":
         smiles_list = pd.read_csv('dataset/' + args.dataset + '/processed/smiles.csv', header=None)[0].tolist()
-        train_dataset, valid_dataset, test_dataset = scaffold_split(dataset, smiles_list, null_value=0, frac_train=0.8,frac_valid=0.1, frac_test=0.1)
+        train_dataset, valid_dataset, test_dataset = scaffold_split(dataset, smiles_list, null_value=0, frac_train=0.8,
+                                                                    frac_valid=0.1, frac_test=0.1)
         print("scaffold")
     # elif args.split == "random":
     #     train_dataset, valid_dataset, test_dataset = random_split(dataset, null_value=0, frac_train=0.8,frac_valid=0.1, frac_test=0.1, seed = args.seed)
@@ -172,25 +167,26 @@ def main():
 
     print(train_dataset[0])
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-    val_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers = args.num_workers)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    val_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    #set up model
-    model = GNN_graphpred(args.num_layer, args.emb_dim, num_tasks, JK = args.JK, drop_ratio = args.dropout_ratio, graph_pooling = args.graph_pooling, gnn_type = args.gnn_type)
+    # set up model
+    model = GNN_graphpred(args.num_layer, args.emb_dim, num_tasks, JK=args.JK, drop_ratio=args.dropout_ratio,
+                          graph_pooling=args.graph_pooling, gnn_type=args.gnn_type)
     if not args.input_model_file == "":
         print("load pretrained model from:", args.input_model_file)
         model.from_pretrained(args.input_model_file)
-    
+
     model.to(device)
 
-    #set up optimizer
-    #different learning rate for different part of GNN
+    # set up optimizer
+    # different learning rate for different part of GNN
     model_param_group = []
     model_param_group.append({"params": model.gnn.parameters()})
     if args.graph_pooling == "attention":
-        model_param_group.append({"params": model.pool.parameters(), "lr":args.lr*args.lr_scale})
-    model_param_group.append({"params": model.graph_pred_linear.parameters(), "lr":args.lr*args.lr_scale})
+        model_param_group.append({"params": model.pool.parameters(), "lr": args.lr * args.lr_scale})
+    model_param_group.append({"params": model.graph_pred_linear.parameters(), "lr": args.lr * args.lr_scale})
     optimizer = optim.Adam(model_param_group, lr=args.lr, weight_decay=args.decay)
     print(optimizer)
 
@@ -212,15 +208,15 @@ def main():
 
     if not args.filename == "":
         fname = 'runs/finetune_cls_runseed' + str(args.runseed) + '/' + args.filename
-        #delete the directory if there exists one
+        # delete the directory if there exists one
         if os.path.exists(fname):
             shutil.rmtree(fname)
             print("removed the existing file.")
         writer = SummaryWriter(fname)
 
-    for epoch in range(1, args.epochs+1):
+    for epoch in range(1, args.epochs + 1):
         print("====epoch " + str(epoch))
-        
+
         train(args, model, device, train_loader, optimizer)
         if scheduler is not None:
             scheduler.step()
@@ -240,7 +236,7 @@ def main():
         else:
             final_test_acc = test_acc
 
-        print("train: %f val: %f test: %f" %(train_acc, val_acc, final_test_acc))
+        print("train: %f val: %f test: %f" % (train_acc, val_acc, final_test_acc))
 
         val_acc_list.append(val_acc)
         test_acc_list.append(test_acc)
@@ -259,6 +255,7 @@ def main():
     fw.write(f"val: {val_acc_list[-1]}, test: {test_acc_list[-1]}\n")
     fw.write(f"\n\n")
     fw.close()
+
 
 if __name__ == "__main__":
     main()

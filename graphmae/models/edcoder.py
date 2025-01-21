@@ -1,19 +1,19 @@
-from typing import Optional
-from itertools import chain
-from functools import partial
-
 import torch
 import torch.nn as nn
+from functools import partial
+from itertools import chain
+from torch_geometric.utils import add_self_loops
+from torch_geometric.utils import dropout_edge
+from typing import Optional
 
+from graphmae.utils import create_norm
 from .gat import GAT
 from .gin import GIN
 from .loss_func import sce_loss
-from graphmae.utils import create_norm
-from torch_geometric.utils import dropout_edge
-from torch_geometric.utils import add_self_loops, remove_self_loops
 
 
-def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead, nhead_out, attn_drop, negative_slope=0.2, concat_out=True) -> nn.Module:
+def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead,
+                 nhead_out, attn_drop, negative_slope=0.2, concat_out=True) -> nn.Module:
     if m_type == "gat":
         mod = GAT(
             in_dim=in_dim,
@@ -55,7 +55,7 @@ def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropo
         mod = nn.Linear(in_dim, out_dim)
     else:
         raise NotImplementedError
-    
+
     return mod
 
 
@@ -81,7 +81,7 @@ class PreModel(nn.Module):
             replace_rate: float = 0.1,
             alpha_l: float = 2,
             concat_hidden: bool = False,
-         ):
+    ):
         super(PreModel, self).__init__()
         self._mask_rate = mask_rate
         self._encoder_type = encoder_type
@@ -89,7 +89,7 @@ class PreModel(nn.Module):
         self._drop_edge_rate = drop_edge_rate
         self._output_hidden_size = num_hidden
         self._concat_hidden = concat_hidden
-        
+
         self._replace_rate = replace_rate
         self._mask_token_rate = 1 - self._replace_rate
 
@@ -103,7 +103,7 @@ class PreModel(nn.Module):
             enc_nhead = 1
 
         dec_in_dim = num_hidden
-        dec_num_hidden = num_hidden // nhead_out if decoder_type in ("gat", "dotgat") else num_hidden 
+        dec_num_hidden = num_hidden // nhead_out if decoder_type in ("gat", "dotgat") else num_hidden
 
         # build encoder
         self.encoder = setup_module(
@@ -164,7 +164,7 @@ class PreModel(nn.Module):
         else:
             raise NotImplementedError
         return criterion
-    
+
     def encoding_mask_noise(self, x, mask_rate=0.3):
         num_nodes = x.shape[0]
         perm = torch.randperm(num_nodes, device=x.device)
@@ -173,7 +173,7 @@ class PreModel(nn.Module):
         # random masking
         num_mask_nodes = int(mask_rate * num_nodes)
         mask_nodes = perm[: num_mask_nodes]
-        keep_nodes = perm[num_mask_nodes: ]
+        keep_nodes = perm[num_mask_nodes:]
 
         if self._replace_rate > 0:
             num_noise_nodes = int(self._replace_rate * num_mask_nodes)
@@ -199,7 +199,7 @@ class PreModel(nn.Module):
         loss = self.mask_attr_prediction(x, edge_index)
         loss_item = {"loss": loss.item()}
         return loss, loss_item
-    
+
     def mask_attr_prediction(self, x, edge_index):
         use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(x, self._mask_rate)
 
@@ -220,7 +220,7 @@ class PreModel(nn.Module):
             # * remask, re-mask
             rep[mask_nodes] = 0
 
-        if self._decoder_type in ("mlp", "linear") :
+        if self._decoder_type in ("mlp", "linear"):
             recon = self.decoder(rep)
         else:
             recon = self.decoder(rep, use_edge_index)
@@ -238,7 +238,7 @@ class PreModel(nn.Module):
     @property
     def enc_params(self):
         return self.encoder.parameters()
-    
+
     @property
     def dec_params(self):
         return chain(*[self.encoder_to_decoder.parameters(), self.decoder.parameters()])

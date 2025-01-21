@@ -1,15 +1,15 @@
 import logging
-from tqdm import tqdm
 import numpy as np
 import torch
-
-from torch_geometric.loader import DataLoader
-from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
-
+from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.svm import SVC
-from sklearn.metrics import f1_score
+from torch_geometric.loader import DataLoader
+from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
+from tqdm import tqdm
 
+from graphmae.datasets.data_util import load_graph_classification_dataset
+from graphmae.models import build_model
 from graphmae.utils import (
     build_args,
     create_optimizer,
@@ -18,11 +18,10 @@ from graphmae.utils import (
     get_current_lr,
     load_best_configs,
 )
-from graphmae.datasets.data_util import load_graph_classification_dataset
-from graphmae.models import build_model
 
 
-def graph_classification_evaluation(model, pooler, dataloader, num_classes, lr_f, weight_decay_f, max_epoch_f, device, mute=False):
+def graph_classification_evaluation(model, pooler, dataloader, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
+                                    mute=False):
     model.eval()
     x_list = []
     y_list = []
@@ -73,7 +72,8 @@ def evaluate_graph_embeddings_using_svm(embeddings, labels):
     return test_f1, test_std
 
 
-def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob=True, logger=None):
+def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f,
+             max_epoch_f, linear_prob=True, logger=None):
     train_loader, eval_loader = dataloaders
 
     epoch_iter = tqdm(range(max_epoch))
@@ -87,7 +87,7 @@ def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler
             feat = batch_g.x
             model.train()
             loss, loss_dict = model(feat, batch_g.edge_index)
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -102,8 +102,6 @@ def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler
 
     return model
 
-            
-
 
 def main(args):
     device = args.device if args.device >= 0 else "cpu"
@@ -117,7 +115,7 @@ def main(args):
     decoder_type = args.decoder
     replace_rate = args.replace_rate
 
-    optim_type = args.optimizer 
+    optim_type = args.optimizer
     loss_fn = args.loss_fn
 
     lr = args.lr
@@ -137,7 +135,7 @@ def main(args):
     args.num_features = num_features
 
     train_idx = torch.arange(len(graphs))
-    
+
     train_loader = DataLoader(graphs, batch_size=batch_size, pin_memory=True)
     eval_loader = DataLoader(graphs, batch_size=batch_size, shuffle=False)
 
@@ -147,7 +145,8 @@ def main(args):
         set_random_seed(seed)
 
         if logs:
-            logger = TBLogger(name=f"{dataset_name}_loss_{loss_fn}_rpr_{replace_rate}_nh_{num_hidden}_nl_{num_layers}_lr_{lr}_mp_{max_epoch}_mpf_{max_epoch_f}_wd_{weight_decay}_wdf_{weight_decay_f}_{encoder_type}_{decoder_type}")
+            logger = TBLogger(
+                name=f"{dataset_name}_loss_{loss_fn}_rpr_{replace_rate}_nh_{num_hidden}_nl_{num_layers}_lr_{lr}_mp_{max_epoch}_mpf_{max_epoch_f}_wd_{weight_decay}_wdf_{weight_decay_f}_{encoder_type}_{decoder_type}")
         else:
             logger = None
 
@@ -157,15 +156,16 @@ def main(args):
 
         if use_scheduler:
             logging.info("Use schedular")
-            scheduler = lambda epoch :( 1 + np.cos((epoch) * np.pi / max_epoch) ) * 0.5
+            scheduler = lambda epoch: (1 + np.cos((epoch) * np.pi / max_epoch)) * 0.5
             # scheduler = lambda epoch: epoch / warmup_steps if epoch < warmup_steps \
-                    # else ( 1 + np.cos((epoch - warmup_steps) * np.pi / (max_epoch - warmup_steps))) * 0.5
+            # else ( 1 + np.cos((epoch - warmup_steps) * np.pi / (max_epoch - warmup_steps))) * 0.5
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=scheduler)
         else:
             scheduler = None
-            
+
         if not load_model:
-            model = pretrain(model, pooler, (train_loader, eval_loader), optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob,  logger)
+            model = pretrain(model, pooler, (train_loader, eval_loader), optimizer, max_epoch, device, scheduler,
+                             num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger)
             model = model.cpu()
 
         if load_model:
@@ -174,10 +174,11 @@ def main(args):
         if save_model:
             logging.info("Saveing Model ...")
             torch.save(model.state_dict(), "checkpoint.pt")
-        
+
         model = model.to(device)
         model.eval()
-        test_f1 = graph_classification_evaluation(model, pooler, eval_loader, num_classes, lr_f, weight_decay_f, max_epoch_f, device, mute=False)
+        test_f1 = graph_classification_evaluation(model, pooler, eval_loader, num_classes, lr_f, weight_decay_f,
+                                                  max_epoch_f, device, mute=False)
         acc_list.append(test_f1)
 
     final_acc, final_acc_std = np.mean(acc_list), np.std(acc_list)

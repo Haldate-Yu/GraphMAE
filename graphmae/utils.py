@@ -1,17 +1,14 @@
-import os
 import argparse
-import random
-import yaml
 import logging
-from functools import partial
 import numpy as np
-
+import os
+import random
 import torch
 import torch.nn as nn
-from torch import optim as optim
+import yaml
+from functools import partial
 from tensorboardX import SummaryWriter
-
-
+from torch import optim as optim
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
@@ -77,12 +74,12 @@ def build_args():
     parser.add_argument("--loss_fn", type=str, default="sce")
     parser.add_argument("--alpha_l", type=float, default=2, help="`pow`coefficient for `sce` loss")
     parser.add_argument("--optimizer", type=str, default="adam")
-    
+
     parser.add_argument("--max_epoch_f", type=int, default=30)
     parser.add_argument("--lr_f", type=float, default=0.001, help="learning rate for evaluation")
     parser.add_argument("--weight_decay_f", type=float, default=0.0, help="weight decay for evaluation")
     parser.add_argument("--linear_prob", action="store_true", default=False)
-    
+
     parser.add_argument("--load_model", action="store_true")
     parser.add_argument("--save_model", action="store_true")
     parser.add_argument("--use_cfg", action="store_true")
@@ -215,7 +212,7 @@ class NormLayer(nn.Module):
             self.mean_scale = nn.Parameter(torch.ones(hidden_dim))
         else:
             raise NotImplementedError
-        
+
     def forward(self, graph, x):
         tensor = x
         if self.norm is not None and type(self.norm) != str:

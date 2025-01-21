@@ -10,10 +10,6 @@ from torch_geometric.nn.dense.linear import Linear
 from torch_geometric.typing import Adj, OptPairTensor, OptTensor, Size, SparseTensor
 from torch_geometric.utils import softmax
 
-
-from torch_geometric.nn.inits import glorot, zeros
-
-
 from graphmae.utils import create_activation
 
 
@@ -48,27 +44,31 @@ class GAT(nn.Module):
         last_activation = create_activation(activation) if encoding else None
         last_residual = (encoding and residual)
         last_norm = norm if encoding else None
-        
+
         if num_layers == 1:
             self.gat_layers.append(GATConv(
                 in_dim, out_dim, nhead_out,
-                concat=concat_out,negative_slope=negative_slope, dropout=attn_drop,residual=last_residual, norm=last_norm,))
+                concat=concat_out, negative_slope=negative_slope, dropout=attn_drop, residual=last_residual,
+                norm=last_norm, ))
         else:
             # input projection (no residual)
             self.gat_layers.append(GATConv(
                 in_dim, num_hidden, nhead,
-                concat=concat_out, negative_slope=negative_slope, dropout=attn_drop, activation=create_activation(activation),residual=residual, norm=norm))
+                concat=concat_out, negative_slope=negative_slope, dropout=attn_drop,
+                activation=create_activation(activation), residual=residual, norm=norm))
             # hidden layers
             for l in range(1, num_layers - 1):
                 # due to multi-head, the in_dim = num_hidden * num_heads
                 self.gat_layers.append(GATConv(
                     num_hidden * nhead, num_hidden, nhead,
-                    concat=concat_out, negative_slope=negative_slope, dropout=attn_drop, activation=create_activation(activation), residual=residual, norm=norm))
+                    concat=concat_out, negative_slope=negative_slope, dropout=attn_drop,
+                    activation=create_activation(activation), residual=residual, norm=norm))
             # output projection
             self.gat_layers.append(GATConv(
                 num_hidden * nhead, out_dim, nhead_out,
-                concat=concat_out,negative_slope=negative_slope, dropout=attn_drop, activation=last_activation, residual=last_residual, norm=last_norm))
-    
+                concat=concat_out, negative_slope=negative_slope, dropout=attn_drop, activation=last_activation,
+                residual=last_residual, norm=last_norm))
+
         self.head = nn.Identity()
 
     def forward(self, x, edge_index, return_hidden=False):
@@ -91,20 +91,20 @@ class GAT(nn.Module):
 
 class GATConv(MessagePassing):
     def __init__(
-        self,
-        in_channels: Union[int, Tuple[int, int]],
-        out_channels: int,
-        heads: int = 1,
-        concat: bool = True,
-        negative_slope: float = 0.2,
-        dropout: float = 0.0,
-        edge_dim: Optional[int] = None,
-        fill_value: Union[float, Tensor, str] = 'mean',
-        bias: bool = True,
-        activation = None,
-        residual = False,
-        norm = None,
-        **kwargs,
+            self,
+            in_channels: Union[int, Tuple[int, int]],
+            out_channels: int,
+            heads: int = 1,
+            concat: bool = True,
+            negative_slope: float = 0.2,
+            dropout: float = 0.0,
+            edge_dim: Optional[int] = None,
+            fill_value: Union[float, Tensor, str] = 'mean',
+            bias: bool = True,
+            activation=None,
+            residual=False,
+            norm=None,
+            **kwargs,
     ):
         kwargs.setdefault('aggr', 'add')
         super().__init__(node_dim=0, **kwargs)
@@ -140,7 +140,7 @@ class GATConv(MessagePassing):
                                   weight_initializer='glorot')
             self.lin_dst = Linear(in_channels[1], heads * out_channels, False,
                                   weight_initializer='glorot')
-        
+
         self.norm = norm
         if norm is not None:
             self.norm = norm(heads * out_channels)
@@ -226,7 +226,7 @@ class GATConv(MessagePassing):
 
         if self.bias is not None:
             out = out + self.bias
-        
+
         if self.norm is not None:
             out = self.norm(out)
 

@@ -17,13 +17,11 @@ def build_model(args):
     drop_edge_rate = args.drop_edge_rate
     replace_rate = args.replace_rate
 
-
     activation = args.activation
     loss_fn = args.loss_fn
     alpha_l = args.alpha_l
     concat_hidden = args.concat_hidden
     num_features = args.num_features
-
 
     model = PreModel(
         in_dim=int(num_features),

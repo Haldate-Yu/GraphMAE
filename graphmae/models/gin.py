@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch_geometric.nn import GINConv, MLP
-from graphmae.utils import create_activation, NormLayer, create_norm
+
+from graphmae.utils import create_activation, create_norm
 
 
 class GIN(nn.Module):
@@ -30,7 +30,7 @@ class GIN(nn.Module):
         last_activation = create_activation(activation) if encoding else None
         last_residual = encoding and residual
         last_norm = norm if encoding else None
-        
+
         if num_layers == 1:
             apply_func = MLP(2, in_dim, num_hidden, out_dim, activation=activation, norm=norm)
             if last_norm:
@@ -39,14 +39,16 @@ class GIN(nn.Module):
         else:
             # input projection (no residual)
             self.layers.append(GINConv(
-                nn=ApplyNodeFunc(MLP(2, in_dim, num_hidden, num_hidden, activation=activation, norm=norm), activation=activation, norm=norm), 
+                nn=ApplyNodeFunc(MLP(2, in_dim, num_hidden, num_hidden, activation=activation, norm=norm),
+                                 activation=activation, norm=norm),
                 train_eps=False)
-                )
+            )
             # hidden layers
             for l in range(1, num_layers - 1):
                 # due to multi-head, the in_dim = num_hidden * num_heads
                 self.layers.append(GINConv(
-                    nn=ApplyNodeFunc(MLP(2, num_hidden, num_hidden, num_hidden, activation=activation, norm=norm), activation=activation, norm=norm), 
+                    nn=ApplyNodeFunc(MLP(2, num_hidden, num_hidden, num_hidden, activation=activation, norm=norm),
+                                     activation=activation, norm=norm),
                     train_eps=False)
                 )
             # output projection
@@ -77,6 +79,7 @@ class GIN(nn.Module):
 
 class ApplyNodeFunc(nn.Module):
     """Update the node feature hv with MLP, BN and ReLU."""
+
     def __init__(self, mlp, norm="batchnorm", activation="relu"):
         super(ApplyNodeFunc, self).__init__()
         self.mlp = mlp
@@ -96,6 +99,7 @@ class ApplyNodeFunc(nn.Module):
 
 class MLP(nn.Module):
     """MLP with linear output"""
+
     def __init__(self, num_layers, input_dim, hidden_dim, output_dim, activation="relu", norm="batchnorm"):
         super(MLP, self).__init__()
         self.linear_or_not = True  # default is linear model
