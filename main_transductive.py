@@ -10,6 +10,7 @@ from graphmae.utils import (
     TBLogger,
     get_current_lr,
     load_best_configs,
+    get_missing_feature_mask
 )
 from graphmae.datasets.data_util import load_dataset
 from graphmae.evaluation import node_classification_evaluation
@@ -21,7 +22,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=lo
 def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f,
              max_epoch_f, linear_prob, logger=None):
     logging.info("start training..")
-    ori_x = graph.x.to(device)
+    ori_x = graph.ndata["feat"].to(device)
     graph = graph.to(device)
     x = feat.to(device)
 
@@ -30,7 +31,7 @@ def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_cl
     for epoch in epoch_iter:
         model.train()
 
-        loss, loss_dict = model(x, graph.edge_index, ori_x)
+        loss, loss_dict = model(graph, x, ori_x)
 
         optimizer.zero_grad()
         loss.backward()
@@ -104,9 +105,21 @@ def main(args):
         else:
             scheduler = None
 
-        x = graph.ndata["feat"]
+        x = graph.ndata["feat"].clone()
         # x = graph.x
-        # todo transform x to graph with missing features (train_x)
+        # transform x to graph with missing features (train_x)
+        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                        type=args.feature_mask_type,
+                                                        n_nodes=graph.num_nodes(),
+                                                        n_features=graph.ndata["feat"].shape[1], )
+        # zero-fill / random-fill
+        if args.feature_init_type == "zero":
+            x[~missing_feature_mask] = float("0")
+        elif args.feature_init_type == "random":
+            init_x = torch.randn_like(x)
+            x[~missing_feature_mask] = init_x[~missing_feature_mask]
+        else:
+            raise ValueError(f"{args.feature_init_type} not implemented!")
 
         if not load_model:
             model = pretrain(model, graph, x, optimizer, max_epoch, device, scheduler, num_classes, lr_f,
@@ -118,8 +131,8 @@ def main(args):
             logging.info("Loading Model ... ")
             model.load_state_dict(torch.load("checkpoint.pt"))
         if save_model:
-            # ./pretrain_model/graph_classification/[dataset]_[encoder]_[decoder].pt
-            logging.info("Saveing Model ...")
+            # ./pretrain_model/node_classification_transductive/[dataset]_[encoder]_[decoder]_[init_type]_[missing_type]_[missing_rate].pt
+            logging.info("Saving Model ...")
             torch.save(model.state_dict(), "checkpoint.pt")
 
         model = model.to(device)

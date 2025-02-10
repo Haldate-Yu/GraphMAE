@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 from sklearn.metrics import f1_score
@@ -15,6 +14,7 @@ from graphmae.utils import (
     set_random_seed,
     TBLogger,
     get_current_lr,
+    get_missing_feature_mask
 )
 from graphmae.datasets.data_util import load_inductive_dataset
 from graphmae.models import build_model
@@ -35,17 +35,18 @@ def evaluete(model, loaders, num_classes, lr_f, weight_decay_f, max_epoch_f, dev
                         feat = subgraph.ndata["feat"]
                         x = model.embed(subgraph, feat)
                         x_all[key].append(x)
-                        y_all[key].append(subgraph.ndata["label"])  
+                        y_all[key].append(subgraph.ndata["label"])
             in_dim = x_all["train"][0].shape[1]
             encoder = LogisticRegression(in_dim, num_classes)
-            num_finetune_params = [p.numel() for p in encoder.parameters() if  p.requires_grad]
+            num_finetune_params = [p.numel() for p in encoder.parameters() if p.requires_grad]
             if not mute:
                 print(f"num parameters for finetuning: {sum(num_finetune_params)}")
                 # torch.save(x.cpu(), "feat.pt")
-            
+
             encoder.to(device)
             optimizer_f = create_optimizer("adam", encoder, lr_f, weight_decay_f)
-            final_acc, estp_acc = mutli_graph_linear_evaluation(encoder, x_all, y_all, optimizer_f, max_epoch_f, device, mute)
+            final_acc, estp_acc = mutli_graph_linear_evaluation(encoder, x_all, y_all, optimizer_f, max_epoch_f, device,
+                                                                mute)
             return final_acc, estp_acc
         else:
             x_all = {"train": None, "val": None, "test": None}
@@ -59,9 +60,9 @@ def evaluete(model, loaders, num_classes, lr_f, weight_decay_f, max_epoch_f, dev
                         x = model.embed(subgraph, feat)
                         mask = subgraph.ndata[f"{key}_mask"]
                         x_all[key] = x[mask]
-                        y_all[key] = subgraph.ndata["label"][mask]  
+                        y_all[key] = subgraph.ndata["label"][mask]
             in_dim = x_all["train"].shape[1]
-            
+
             encoder = LogisticRegression(in_dim, num_classes)
             encoder = encoder.to(device)
             optimizer_f = create_optimizer("adam", encoder, lr_f, weight_decay_f)
@@ -73,8 +74,11 @@ def evaluete(model, loaders, num_classes, lr_f, weight_decay_f, max_epoch_f, dev
             train_mask = torch.arange(num_train, device=device)
             val_mask = torch.arange(num_train, num_train + num_val, device=device)
             test_mask = torch.arange(num_train + num_val, num_nodes, device=device)
-            
-            final_acc, estp_acc = linear_probing_for_inductive_node_classiifcation(encoder, x, y, (train_mask, val_mask, test_mask), optimizer_f, max_epoch_f, device, mute)
+
+            final_acc, estp_acc = linear_probing_for_inductive_node_classiifcation(encoder, x, y,
+                                                                                   (train_mask, val_mask, test_mask),
+                                                                                   optimizer_f, max_epoch_f, device,
+                                                                                   mute)
             return final_acc, estp_acc
     else:
         raise NotImplementedError
@@ -114,7 +118,7 @@ def mutli_graph_linear_evaluation(model, feat, labels, optimizer, max_epoch, dev
             val_out = np.where(val_out >= 0, 1, 0)
 
             for x, y in zip(feat["test"], labels["test"]):
-                test_pred = model(None, x)# 
+                test_pred = model(None, x)  #
                 test_out.append(test_pred)
             test_out = torch.cat(test_out, dim=0).cpu().numpy()
             test_label = torch.cat(labels["test"], dim=0).cpu().numpy()
@@ -122,30 +126,34 @@ def mutli_graph_linear_evaluation(model, feat, labels, optimizer, max_epoch, dev
 
             val_acc = f1_score(val_label, val_out, average="micro")
             test_acc = f1_score(test_label, test_out, average="micro")
-        
+
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
             best_val_epoch = epoch
             best_val_test_acc = test_acc
 
         if not mute:
-            epoch_iter.set_description(f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_acc:{val_acc}, test_acc:{test_acc: .4f}")
+            epoch_iter.set_description(
+                f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_acc:{val_acc}, test_acc:{test_acc: .4f}")
 
     if mute:
-        print(f"# IGNORE: --- Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}, Early-stopping-TestAcc: {best_val_test_acc:.4f},  Final-TestAcc: {test_acc:.4f}--- ")
+        print(
+            f"# IGNORE: --- Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}, Early-stopping-TestAcc: {best_val_test_acc:.4f},  Final-TestAcc: {test_acc:.4f}--- ")
     else:
-        print(f"--- Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}, Early-stopping-TestAcc: {best_val_test_acc:.4f}, Final-TestAcc: {test_acc:.4f} --- ")
+        print(
+            f"--- Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}, Early-stopping-TestAcc: {best_val_test_acc:.4f}, Final-TestAcc: {test_acc:.4f} --- ")
 
     return test_acc, best_val_test_acc
 
 
-def pretrain(model, dataloaders, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger=None):
+def pretrain(args, model, dataloaders, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f,
+             max_epoch_f, linear_prob, logger=None):
     logging.info("start training..")
     train_loader, val_loader, test_loader, eval_train_loader = dataloaders
 
     epoch_iter = tqdm(range(max_epoch))
 
-    if isinstance(train_loader, list) and len(train_loader) ==1:
+    if isinstance(train_loader, list) and len(train_loader) == 1:
         train_loader = [train_loader[0].to(device)]
         eval_train_loader = train_loader
     if isinstance(val_loader, list) and len(val_loader) == 1:
@@ -158,7 +166,22 @@ def pretrain(model, dataloaders, optimizer, max_epoch, device, scheduler, num_cl
 
         for subgraph in train_loader:
             subgraph = subgraph.to(device)
-            loss, loss_dict = model(subgraph, subgraph.ndata["feat"])
+            # todo transform x to graph with missing features
+            x = subgraph.ndata["feat"].clone()
+            missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                            type=args.feature_mask_type,
+                                                            n_nodes=subgraph.num_nodes(),
+                                                            n_features=subgraph.ndata["feat"].shape[1], )
+            # zero-fill / random-fill
+            if args.feature_init_type == "zero":
+                x[~missing_feature_mask] = float("0")
+            elif args.feature_init_type == "random":
+                init_x = torch.randn_like(x)
+                x[~missing_feature_mask] = init_x[~missing_feature_mask]
+            else:
+                raise ValueError(f"{args.feature_init_type} not implemented!")
+
+            loss, loss_dict = model(subgraph, x, subgraph.ndata["feat"])
 
             optimizer.zero_grad()
             loss.backward()
@@ -173,9 +196,10 @@ def pretrain(model, dataloaders, optimizer, max_epoch, device, scheduler, num_cl
         if logger is not None:
             loss_dict["lr"] = get_current_lr(optimizer)
             logger.note(loss_dict, step=epoch)
-        
-        if epoch == (max_epoch//2):
-            evaluete(model, (eval_train_loader, val_loader, test_loader), num_classes, lr_f, weight_decay_f, max_epoch_f, device, linear_prob, mute=True)
+
+        if epoch == (max_epoch // 2):
+            evaluete(model, (eval_train_loader, val_loader, test_loader), num_classes, lr_f, weight_decay_f,
+                     max_epoch_f, device, linear_prob, mute=True)
     return model
 
 
@@ -191,7 +215,7 @@ def main(args):
     decoder_type = args.decoder
     replace_rate = args.replace_rate
 
-    optim_type = args.optimizer 
+    optim_type = args.optimizer
 
     loss_fn = args.loss_fn
     lr = args.lr
@@ -206,10 +230,10 @@ def main(args):
 
     (
         train_dataloader,
-        valid_dataloader, 
-        test_dataloader, 
-        eval_train_dataloader, 
-        num_features, 
+        valid_dataloader,
+        test_dataloader,
+        eval_train_dataloader,
+        num_features,
         num_classes
     ) = load_inductive_dataset(dataset_name)
     args.num_features = num_features
@@ -221,7 +245,8 @@ def main(args):
         set_random_seed(seed)
 
         if logs:
-            logger = TBLogger(name=f"{dataset_name}_loss_{loss_fn}_rpr_{replace_rate}_nh_{num_hidden}_nl_{num_layers}_lr_{lr}_mp_{max_epoch}_mpf_{max_epoch_f}_wd_{weight_decay}_wdf_{weight_decay_f}_{encoder_type}_{decoder_type}")
+            logger = TBLogger(
+                name=f"{dataset_name}_loss_{loss_fn}_rpr_{replace_rate}_nh_{num_hidden}_nl_{num_layers}_lr_{lr}_mp_{max_epoch}_mpf_{max_epoch_f}_wd_{weight_decay}_wdf_{weight_decay_f}_{encoder_type}_{decoder_type}")
         else:
             logger = None
 
@@ -231,15 +256,17 @@ def main(args):
 
         if use_scheduler:
             logging.info("Use schedular")
-            scheduler = lambda epoch :( 1 + np.cos((epoch) * np.pi / max_epoch) ) * 0.5
+            scheduler = lambda epoch: (1 + np.cos((epoch) * np.pi / max_epoch)) * 0.5
             # scheduler = lambda epoch: epoch / warmup_steps if epoch < warmup_steps \
-                    # else ( 1 + np.cos((epoch - warmup_steps) * np.pi / (max_epoch - warmup_steps))) * 0.5
+            # else ( 1 + np.cos((epoch - warmup_steps) * np.pi / (max_epoch - warmup_steps))) * 0.5
             scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=scheduler)
         else:
             scheduler = None
 
         if not load_model:
-            model = pretrain(model, (train_dataloader, valid_dataloader, test_dataloader, eval_train_dataloader), optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger)
+            model = pretrain(args, model, (train_dataloader, valid_dataloader, test_dataloader, eval_train_dataloader),
+                             optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f, max_epoch_f,
+                             linear_prob, logger)
         model = model.cpu()
 
         model = model.to(device)
@@ -249,13 +276,14 @@ def main(args):
             logging.info("Loading Model ... ")
             model.load_state_dict(torch.load("checkpoint.pt"))
         if save_model:
-            logging.info("Saveing Model ...")
+            logging.info("Saving Model ...")
             torch.save(model.state_dict(), "checkpoint.pt")
-        
+
         model = model.to(device)
         model.eval()
 
-        final_acc, estp_acc = evaluete(model, (eval_train_dataloader, valid_dataloader, test_dataloader), num_classes, lr_f, weight_decay_f, max_epoch_f, device, linear_prob)
+        final_acc, estp_acc = evaluete(model, (eval_train_dataloader, valid_dataloader, test_dataloader), num_classes,
+                                       lr_f, weight_decay_f, max_epoch_f, device, linear_prob)
         acc_list.append(final_acc)
         estp_acc_list.append(estp_acc)
 

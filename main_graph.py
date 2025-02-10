@@ -193,7 +193,7 @@ def main(args):
             model.load_state_dict(torch.load("checkpoint.pt"))
         if save_model:
             # ./pretrain_model/graph_classification/[dataset]_[encoder]_[decoder].pt
-            logging.info("Saveing Model ...")
+            logging.info("Saving Model ...")
             torch.save(model.state_dict(), "checkpoint.pt")
 
         model = model.to(device)

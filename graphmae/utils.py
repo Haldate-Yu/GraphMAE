@@ -13,8 +13,6 @@ import torch.nn as nn
 from torch import optim as optim
 from tensorboardX import SummaryWriter
 
-
-
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 
@@ -79,12 +77,12 @@ def build_args():
     parser.add_argument("--loss_fn", type=str, default="sce")
     parser.add_argument("--alpha_l", type=float, default=2, help="`pow`coefficient for `sce` loss")
     parser.add_argument("--optimizer", type=str, default="adam")
-    
+
     parser.add_argument("--max_epoch_f", type=int, default=30)
     parser.add_argument("--lr_f", type=float, default=0.001, help="learning rate for evaluation")
     parser.add_argument("--weight_decay_f", type=float, default=0.0, help="weight decay for evaluation")
     parser.add_argument("--linear_prob", action="store_true", default=False)
-    
+
     parser.add_argument("--load_model", action="store_true")
     parser.add_argument("--save_model", action="store_true")
     parser.add_argument("--use_cfg", action="store_true")
@@ -98,6 +96,10 @@ def build_args():
     parser.add_argument("--batch_size", type=int, default=32)
 
     # for missing feature graphs
+    parser.add_argument(
+        "--feature_init_type", type=str, help="Type of missing feature mask", default="zero",
+        choices=["zero", "random"],
+    )
     parser.add_argument(
         "--feature_mask_type", type=str, help="Type of missing feature mask", default="uniform",
         choices=["uniform", "structural"],
@@ -256,7 +258,7 @@ class NormLayer(nn.Module):
             self.mean_scale = nn.Parameter(torch.ones(hidden_dim))
         else:
             raise NotImplementedError
-        
+
     def forward(self, graph, x):
         tensor = x
         if self.norm is not None and type(self.norm) != str:
@@ -281,3 +283,16 @@ class NormLayer(nn.Module):
         std = ((std.T / batch_list).T + 1e-6).sqrt()
         std = std.repeat_interleave(batch_list, dim=0)
         return self.weight * sub / std + self.bias
+
+
+def get_missing_feature_mask(rate, n_nodes, n_features, type="uniform"):
+    """
+    Return mask of shape [n_nodes, n_features] indicating whether each feature is present or missing.
+    If `type`='uniform', then each feature of each node is missing uniformly at random with probability `rate`.
+    Instead, if `type`='structural', either we observe all features for a node, or we observe none. For each node
+    there is a probability of `rate` of not observing any feature.
+    """
+    if type == "structural":  # either remove all of a nodes features or none
+        return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes)).bool().unsqueeze(1).repeat(1, n_features)
+    elif type == "uniform":
+        return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes, n_features)).bool()

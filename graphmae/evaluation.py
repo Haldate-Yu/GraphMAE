@@ -6,7 +6,8 @@ import torch.nn as nn
 from graphmae.utils import create_optimizer, accuracy
 
 
-def node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device, linear_prob=True, mute=False):
+def node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
+                                   linear_prob=True, mute=False):
     model.eval()
     if linear_prob:
         with torch.no_grad():
@@ -17,13 +18,14 @@ def node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_de
         encoder = model.encoder
         encoder.reset_classifier(num_classes)
 
-    num_finetune_params = [p.numel() for p in encoder.parameters() if  p.requires_grad]
+    num_finetune_params = [p.numel() for p in encoder.parameters() if p.requires_grad]
     if not mute:
         print(f"num parameters for finetuning: {sum(num_finetune_params)}")
-    
+
     encoder.to(device)
     optimizer_f = create_optimizer("adam", encoder, lr_f, weight_decay_f)
-    final_acc, estp_acc = linear_probing_for_transductive_node_classiifcation(encoder, graph, x, optimizer_f, max_epoch_f, device, mute)
+    final_acc, estp_acc = linear_probing_for_transductive_node_classiifcation(encoder, graph, x, optimizer_f,
+                                                                              max_epoch_f, device, mute)
     return final_acc, estp_acc
 
 
@@ -32,6 +34,7 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
 
     graph = graph.to(device)
     x = feat.to(device)
+    ori_x = graph.ndata["feat"].to(device)
 
     train_mask = graph.ndata["train_mask"]
     val_mask = graph.ndata["val_mask"]
@@ -49,6 +52,8 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
 
     for epoch in epoch_iter:
         model.train()
+        # only encoder part
+        # use missing feature to train
         out = model(graph, x)
         loss = criterion(out[train_mask], labels[train_mask])
         optimizer.zero_grad()
@@ -58,28 +63,32 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
 
         with torch.no_grad():
             model.eval()
-            pred = model(graph, x)
+            # use original feature to val/test
+            pred = model(graph, ori_x)
             val_acc = accuracy(pred[val_mask], labels[val_mask])
             val_loss = criterion(pred[val_mask], labels[val_mask])
             test_acc = accuracy(pred[test_mask], labels[test_mask])
             test_loss = criterion(pred[test_mask], labels[test_mask])
-        
+
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
             best_val_epoch = epoch
             best_model = copy.deepcopy(model)
 
         if not mute:
-            epoch_iter.set_description(f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_loss:{val_loss.item(): .4f}, val_acc:{val_acc}, test_loss:{test_loss.item(): .4f}, test_acc:{test_acc: .4f}")
+            epoch_iter.set_description(
+                f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_loss:{val_loss.item(): .4f}, val_acc:{val_acc}, test_loss:{test_loss.item(): .4f}, test_acc:{test_acc: .4f}")
 
     best_model.eval()
     with torch.no_grad():
-        pred = best_model(graph, x)
+        pred = best_model(graph, ori_x)
         estp_test_acc = accuracy(pred[test_mask], labels[test_mask])
     if mute:
-        print(f"# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
+        print(
+            f"# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
     else:
-        print(f"--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
+        print(
+            f"--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
 
     # (final_acc, es_acc, best_acc)
     return test_acc, estp_test_acc
@@ -99,7 +108,7 @@ def linear_probing_for_inductive_node_classiifcation(model, x, labels, mask, opt
     if not mute:
         epoch_iter = tqdm(range(max_epoch))
     else:
-        epoch_iter = range(max_epoch)  
+        epoch_iter = range(max_epoch)
 
         best_val_acc = 0
 
@@ -124,23 +133,26 @@ def linear_probing_for_inductive_node_classiifcation(model, x, labels, mask, opt
             val_loss = criterion(pred[val_mask], labels[val_mask])
             test_acc = accuracy(pred[test_mask], labels[test_mask])
             test_loss = criterion(pred[test_mask], labels[test_mask])
-        
+
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
             best_val_epoch = epoch
             best_model = copy.deepcopy(model)
 
         if not mute:
-            epoch_iter.set_description(f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_loss:{val_loss.item(): .4f}, val_acc:{val_acc}, test_loss:{test_loss.item(): .4f}, test_acc:{test_acc: .4f}")
+            epoch_iter.set_description(
+                f"# Epoch: {epoch}, train_loss:{loss.item(): .4f}, val_loss:{val_loss.item(): .4f}, val_acc:{val_acc}, test_loss:{test_loss.item(): .4f}, test_acc:{test_acc: .4f}")
 
     best_model.eval()
     with torch.no_grad():
         pred = best_model(None, x)
         estp_test_acc = accuracy(pred[test_mask], labels[test_mask])
     if mute:
-        print(f"# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} ")
+        print(
+            f"# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} ")
     else:
-        print(f"--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}")
+        print(
+            f"--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch}")
 
     return test_acc, estp_test_acc
 

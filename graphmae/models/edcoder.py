@@ -250,7 +250,7 @@ class PreModel(nn.Module):
             # * remask, re-mask
             rep[mask_nodes] = 0
 
-        if self._decoder_type in ("mlp", "liear"):
+        if self._decoder_type in ("mlp", "linear"):
             recon = self.decoder(rep)
         else:
             recon = self.decoder(pre_use_g, rep)
