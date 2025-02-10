@@ -41,7 +41,7 @@ def get_current_lr(optimizer):
 
 def build_args():
     parser = argparse.ArgumentParser(description="GAT")
-    parser.add_argument("--seeds", type=int, nargs="+", default=[0])
+    parser.add_argument("--seeds", type=int, nargs="+", default=[42])
     parser.add_argument("--dataset", type=str, default="cora")
     parser.add_argument("--device", type=int, default=-1)
     parser.add_argument("--max_epoch", type=int, default=200,
@@ -96,6 +96,14 @@ def build_args():
     parser.add_argument("--pooling", type=str, default="mean")
     parser.add_argument("--deg4feat", action="store_true", default=False, help="use node degree as input feature")
     parser.add_argument("--batch_size", type=int, default=32)
+
+    # for missing feature graphs
+    parser.add_argument(
+        "--feature_mask_type", type=str, help="Type of missing feature mask", default="uniform",
+        choices=["uniform", "structural"],
+    )
+    parser.add_argument("--feature_missing_rate", type=float, help="Rate of node features missing", default=0.99)
+
     args = parser.parse_args()
     return args
 

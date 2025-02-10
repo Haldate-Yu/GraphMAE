@@ -13,7 +13,8 @@ from .loss_func import sce_loss
 from graphmae.utils import create_norm, drop_edge
 
 
-def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead, nhead_out, attn_drop, negative_slope=0.2, concat_out=True) -> nn.Module:
+def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead,
+                 nhead_out, attn_drop, negative_slope=0.2, concat_out=True) -> nn.Module:
     if m_type == "gat":
         mod = GAT(
             in_dim=in_dim,
@@ -61,13 +62,13 @@ def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropo
         )
     elif m_type == "gcn":
         mod = GCN(
-            in_dim=in_dim, 
-            num_hidden=num_hidden, 
-            out_dim=out_dim, 
-            num_layers=num_layers, 
-            dropout=dropout, 
-            activation=activation, 
-            residual=residual, 
+            in_dim=in_dim,
+            num_hidden=num_hidden,
+            out_dim=out_dim,
+            num_layers=num_layers,
+            dropout=dropout,
+            activation=activation,
+            residual=residual,
             norm=create_norm(norm),
             encoding=(enc_dec == "encoding")
         )
@@ -83,7 +84,7 @@ def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropo
         mod = nn.Linear(in_dim, out_dim)
     else:
         raise NotImplementedError
-    
+
     return mod
 
 
@@ -109,7 +110,7 @@ class PreModel(nn.Module):
             replace_rate: float = 0.1,
             alpha_l: float = 2,
             concat_hidden: bool = False,
-         ):
+    ):
         super(PreModel, self).__init__()
         self._mask_rate = mask_rate
 
@@ -118,7 +119,7 @@ class PreModel(nn.Module):
         self._drop_edge_rate = drop_edge_rate
         self._output_hidden_size = num_hidden
         self._concat_hidden = concat_hidden
-        
+
         self._replace_rate = replace_rate
         self._mask_token_rate = 1 - self._replace_rate
 
@@ -132,7 +133,7 @@ class PreModel(nn.Module):
             enc_nhead = 1
 
         dec_in_dim = num_hidden
-        dec_num_hidden = num_hidden // nhead_out if decoder_type in ("gat", "dotgat") else num_hidden 
+        dec_num_hidden = num_hidden // nhead_out if decoder_type in ("gat", "dotgat") else num_hidden
 
         # build encoder
         self.encoder = setup_module(
@@ -193,7 +194,7 @@ class PreModel(nn.Module):
         else:
             raise NotImplementedError
         return criterion
-    
+
     def encoding_mask_noise(self, g, x, mask_rate=0.3):
         num_nodes = g.num_nodes()
         perm = torch.randperm(num_nodes, device=x.device)
@@ -202,7 +203,7 @@ class PreModel(nn.Module):
         # random masking
         num_mask_nodes = int(mask_rate * num_nodes)
         mask_nodes = perm[: num_mask_nodes]
-        keep_nodes = perm[num_mask_nodes: ]
+        keep_nodes = perm[num_mask_nodes:]
 
         if self._replace_rate > 0:
             num_noise_nodes = int(self._replace_rate * num_mask_nodes)
@@ -224,13 +225,13 @@ class PreModel(nn.Module):
 
         return use_g, out_x, (mask_nodes, keep_nodes)
 
-    def forward(self, g, x):
+    def forward(self, g, x, x_ori):
         # ---- attribute reconstruction ----
-        loss = self.mask_attr_prediction(g, x)
+        loss = self.mask_attr_prediction(g, x, x_ori)
         loss_item = {"loss": loss.item()}
         return loss, loss_item
-    
-    def mask_attr_prediction(self, g, x):
+
+    def mask_attr_prediction(self, g, x, x_ori):
         pre_use_g, use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(g, x, self._mask_rate)
 
         if self._drop_edge_rate > 0:
@@ -249,12 +250,16 @@ class PreModel(nn.Module):
             # * remask, re-mask
             rep[mask_nodes] = 0
 
-        if self._decoder_type in ("mlp", "liear") :
+        if self._decoder_type in ("mlp", "liear"):
             recon = self.decoder(rep)
         else:
             recon = self.decoder(pre_use_g, rep)
 
-        x_init = x[mask_nodes]
+        if x_ori is not None:
+            x_init = x_ori[mask_nodes]
+        else:
+            x_init = x[mask_nodes]
+
         x_rec = recon[mask_nodes]
 
         loss = self.criterion(x_rec, x_init)
@@ -267,7 +272,7 @@ class PreModel(nn.Module):
     @property
     def enc_params(self):
         return self.encoder.parameters()
-    
+
     @property
     def dec_params(self):
         return chain(*[self.encoder_to_decoder.parameters(), self.decoder.parameters()])
