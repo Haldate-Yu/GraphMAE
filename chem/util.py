@@ -238,7 +238,7 @@ class MaskAtom:
 
         # ----------- graphMAE -----------
         atom_type = F.one_hot(data.mask_node_label[:, 0], num_classes=self.num_atom_type).float()
-        atom_chirality = F.one_hot(data.mask_node_label[:, 1], num_classes=self.num_chirality_tag).float()
+        # atom_chirality = F.one_hot(data.mask_node_label[:, 1], num_classes=self.num_chirality_tag).float()
         # data.node_attr_label = torch.cat((atom_type,atom_chirality), dim=1)
         data.node_attr_label = atom_type
 

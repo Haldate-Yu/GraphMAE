@@ -1,4 +1,5 @@
 import argparse
+import os.path
 from functools import partial
 
 from loader import MoleculeDataset
@@ -25,7 +26,11 @@ from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_poo
 from tensorboardX import SummaryWriter
 
 import timeit
+import warnings
+from graphmae.utils import get_missing_feature_mask, save_model_dict, load_model_dict
 
+# ignore user warnings
+warnings.filterwarnings("ignore")
 
 def compute_accuracy(pred, target):
     return float(torch.sum(torch.max(pred.detach(), dim=1)[1] == target).cpu().item()) / len(pred)
@@ -66,8 +71,22 @@ def train_mae(args, model_list, loader, optimizer_list, device, alpha_l=1.0, los
     epoch_iter = tqdm(loader, desc="Iteration")
     for step, batch in enumerate(epoch_iter):
         batch = batch.to(device)
-        # todo transform x to graph with missing features
-        node_rep = model(batch.x, batch.edge_index, batch.edge_attr)
+        # transform x to graph with missing features
+        feat = batch.x.clone()
+        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                        type=args.feature_mask_type,
+                                                        n_nodes=batch.num_nodes,
+                                                        n_features=batch.num_node_features, )
+        # zero-fill / random-fill
+        if args.feature_init_type == "zero":
+            feat[~missing_feature_mask] = float("0")
+        elif args.feature_init_type == "random":
+            init_x = torch.randn_like(feat)
+            feat[~missing_feature_mask] = init_x[~missing_feature_mask]
+        else:
+            raise ValueError(f"{args.feature_init_type} not implemented!")
+
+        node_rep = model(feat, batch.edge_index, batch.edge_attr)
 
         ## loss for nodes
         node_attr_label = batch.node_attr_label
@@ -147,8 +166,28 @@ def main():
     parser.add_argument("--loss_fn", type=str, default="sce")
     parser.add_argument("--decoder", type=str, default="gin")
     parser.add_argument("--use_scheduler", action="store_true", default=False)
+
+    # for missing feature graphs
+    parser.add_argument(
+        "--feature_init_type", type=str, help="Type of missing feature mask", default="zero",
+        choices=["zero", "random"],
+    )
+    parser.add_argument(
+        "--feature_mask_type", type=str, help="Type of missing feature mask", default="uniform",
+        choices=["uniform", "structural"],
+    )
+    parser.add_argument("--feature_missing_rate", type=float, help="Rate of node features missing", default=0.99)
+
+    # save model args
+    parser.add_argument("--model_prefix", type=str, help="Save Model folder prefix", default="transfer")
+
     args = parser.parse_args()
     print(args)
+
+    # setting model file name
+    args.output_model_file = (args.dataset + "_" + args.gnn_type + "_" +
+                              args.feature_init_type + "_" + args.feature_mask_type +
+                              "_" + str(args.feature_missing_rate))
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -211,7 +250,12 @@ def main():
 
     optimizer_list = [optimizer_model, optimizer_dec_pred_atoms, optimizer_dec_pred_bonds]
 
-    output_file_temp = "./checkpoints/" + args.output_model_file + f"_{args.gnn_type}"
+    output_file_temp = "./checkpoints/" + args.output_model_file
+    if not os.path.exists("./checkpoints"):
+        print("=" * 20)
+        print("Creating checkpoint dir !!!")
+
+        os.makedirs("./checkpoints")
 
     for epoch in range(1, args.epochs + 1):
         print("====epoch " + str(epoch))
@@ -230,7 +274,7 @@ def main():
         if scheduler_dec is not None:
             scheduler_dec.step()
 
-    output_file = "./checkpoints/" + args.output_model_file + f"_{args.gnn_type}"
+    output_file = "./checkpoints/" + args.output_model_file
     if resume:
         torch.save(model.state_dict(), args.input_model_file.rsplit(".", 1)[0] + f"_resume_{args.epochs}.pth")
     elif not args.output_model_file == "":

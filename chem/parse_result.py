@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pickle
 
+
 def get_test_acc(event_file):
     val_auc_list = np.zeros(100)
     test_auc_list = np.zeros(100)
@@ -11,18 +12,19 @@ def get_test_acc(event_file):
         if len(e.summary.value) == 0:
             continue
         if e.summary.value[0].tag == "data/val_auc":
-            val_auc_list[e.step-1] = e.summary.value[0].simple_value
+            val_auc_list[e.step - 1] = e.summary.value[0].simple_value
         if e.summary.value[0].tag == "data/test_auc":
-            test_auc_list[e.step-1] = e.summary.value[0].simple_value
-    
+            test_auc_list[e.step - 1] = e.summary.value[0].simple_value
+
     best_epoch = np.argmax(val_auc_list)
 
     return test_auc_list[best_epoch]
 
+
 if __name__ == "__main__":
 
     dataset_list = ["muv", "bace", "bbbp", "clintox", "hiv", "sider", "tox21", "toxcast"]
-    #10 random seed
+    # 10 random seed
     seed_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     config_list = []
 
@@ -61,13 +63,5 @@ if __name__ == "__main__":
                 result_mat[i, j, k] = get_test_acc(dir_name + "/" + event_file)
 
     with open("result_summary", "wb") as f:
-        pickle.dump({"result_mat": result_mat, "seed_list": seed_list, "config_list": config_list, "dataset_list": dataset_list}, f)
-
-
-
-
-
-
-
-
-
+        pickle.dump({"result_mat": result_mat, "seed_list": seed_list, "config_list": config_list,
+                     "dataset_list": dataset_list}, f)

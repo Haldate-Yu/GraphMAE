@@ -20,6 +20,9 @@ from graphmae.utils import (
     TBLogger,
     get_current_lr,
     load_best_configs,
+    get_missing_feature_mask,
+    save_model_dict,
+    load_model_dict
 )
 from graphmae.datasets.data_util import load_graph_classification_dataset
 from graphmae.models import build_model
@@ -83,7 +86,19 @@ def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler
 
             ori_feat = batch_g.ndata["attr"]
             # todo transform x to graph with missing features
-            feat = batch_g.ndata["attr"]
+            feat = batch_g.ndata["attr"].clone()
+            missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                            type=args.feature_mask_type,
+                                                            n_nodes=batch_g.num_nodes(),
+                                                            n_features=batch_g.ndata["feat"].shape[1], )
+            # zero-fill / random-fill
+            if args.feature_init_type == "zero":
+                feat[~missing_feature_mask] = float("0")
+            elif args.feature_init_type == "random":
+                init_x = torch.randn_like(feat)
+                feat[~missing_feature_mask] = init_x[~missing_feature_mask]
+            else:
+                raise ValueError(f"{args.feature_init_type} not implemented!")
 
             model.train()
             loss, loss_dict = model(batch_g, feat, ori_feat)
@@ -190,11 +205,13 @@ def main(args):
 
         if load_model:
             logging.info("Loading Model ... ")
-            model.load_state_dict(torch.load("checkpoint.pt"))
+            # model.load_state_dict(torch.load("checkpoint.pt"))
+            model = load_model_dict(args, model)
         if save_model:
             # ./pretrain_model/graph_classification/[dataset]_[encoder]_[decoder].pt
             logging.info("Saving Model ...")
-            torch.save(model.state_dict(), "checkpoint.pt")
+            # torch.save(model.state_dict(), "checkpoint.pt")
+            save_model_dict(args, model)
 
         model = model.to(device)
         model.eval()
@@ -210,5 +227,6 @@ if __name__ == "__main__":
     args = build_args()
     if args.use_cfg:
         args = load_best_configs(args, "configs.yml")
+    args.model_prefix = "graph_classification"
     print(args)
     main(args)

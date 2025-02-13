@@ -106,6 +106,9 @@ def build_args():
     )
     parser.add_argument("--feature_missing_rate", type=float, help="Rate of node features missing", default=0.99)
 
+    # save model args
+    parser.add_argument("--model_prefix", type=str, help="Save Model folder prefix")
+
     args = parser.parse_args()
     return args
 
@@ -296,3 +299,47 @@ def get_missing_feature_mask(rate, n_nodes, n_features, type="uniform"):
         return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes)).bool().unsqueeze(1).repeat(1, n_features)
     elif type == "uniform":
         return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes, n_features)).bool()
+
+
+def save_model_dict(args, model):
+    result_dir = "./pretrain_model/"
+    if not os.path.exists(result_dir):
+        print("=" * 20)
+        print("Creating Result Dir !!!")
+
+        os.makedirs(result_dir)
+
+    task_type_dir = result_dir + args.model_prefix + "/"
+    if not os.path.exists(task_type_dir):
+        print("=" * 20)
+        print("Creating Task Dir !!!")
+
+    filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
+               "_" + args.feature_init_type + "_" + args.feature_mask_type + \
+               "_" + str(args.feature_missing_rate) + ".pt"
+    print("file_name: {}".format(filename))
+    file_path = task_type_dir + filename
+
+    print("Saving Model ...")
+    torch.save(model.state_dict(), file_path)
+
+
+def load_model_dict(args, model):
+    result_dir = "./pretrain_model/"
+    if not os.path.exists(result_dir):
+        raise ValueError("Result dir not exist!")
+
+    task_type_dir = result_dir + args.model_prefix + "/"
+    if not os.path.exists(task_type_dir):
+        raise ValueError("Task type dir not exist!")
+
+    filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
+               "_" + args.feature_init_type + "_" + args.feature_mask_type + \
+               "_" + args.feature_missing_rate + ".pt"
+
+    file_path = task_type_dir + filename
+    if not os.path.exists(file_path):
+        raise ValueError("Model file not exist!")
+
+    model.load_state_dict(torch.load(file_path))
+    return model

@@ -14,7 +14,9 @@ from graphmae.utils import (
     set_random_seed,
     TBLogger,
     get_current_lr,
-    get_missing_feature_mask
+    get_missing_feature_mask,
+    save_model_dict,
+    load_model_dict
 )
 from graphmae.datasets.data_util import load_inductive_dataset
 from graphmae.models import build_model
@@ -274,10 +276,13 @@ def main(args):
 
         if load_model:
             logging.info("Loading Model ... ")
-            model.load_state_dict(torch.load("checkpoint.pt"))
+            # model.load_state_dict(torch.load("checkpoint.pt"))
+            model = load_model_dict(args, model)
         if save_model:
+            # ./pretrain_model/node_classification_inductive/[dataset]_[encoder]_[decoder]_[init_type]_[missing_type]_[missing_rate].pt
             logging.info("Saving Model ...")
-            torch.save(model.state_dict(), "checkpoint.pt")
+            # torch.save(model.state_dict(), "checkpoint.pt")
+            save_model_dict(args, model)
 
         model = model.to(device)
         model.eval()
@@ -319,5 +324,6 @@ if __name__ == "__main__":
     args = build_args()
     if args.use_cfg:
         args = load_best_configs(args, "configs.yml")
+    args.model_prefix = "inductive"
     print(args)
     main(args)
