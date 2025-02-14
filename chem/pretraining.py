@@ -18,19 +18,15 @@ from sklearn.metrics import roc_auc_score
 
 from splitters import scaffold_split, random_split, random_scaffold_split
 import pandas as pd
-
-from util import MaskAtom
-
+from util import MaskAtom, get_missing_feature_mask
 from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_pool
-
 from tensorboardX import SummaryWriter
-
 import timeit
 import warnings
-from graphmae.utils import get_missing_feature_mask, save_model_dict, load_model_dict
 
 # ignore user warnings
 warnings.filterwarnings("ignore")
+
 
 def compute_accuracy(pred, target):
     return float(torch.sum(torch.max(pred.detach(), dim=1)[1] == target).cpu().item()) / len(pred)
@@ -75,7 +71,7 @@ def train_mae(args, model_list, loader, optimizer_list, device, alpha_l=1.0, los
         feat = batch.x.clone()
         missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
                                                         type=args.feature_mask_type,
-                                                        n_nodes=batch.num_nodes,
+                                                        n_nodes=feat.size()[0],
                                                         n_features=batch.num_node_features, )
         # zero-fill / random-fill
         if args.feature_init_type == "zero":
