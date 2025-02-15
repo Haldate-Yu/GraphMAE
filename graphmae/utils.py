@@ -314,6 +314,8 @@ def save_model_dict(args, model):
         print("=" * 20)
         print("Creating Task Dir !!!")
 
+        os.makedirs(task_type_dir)
+
     filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                "_" + str(args.feature_missing_rate) + ".pt"
