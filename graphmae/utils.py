@@ -291,9 +291,10 @@ def save_model_dict(args, model):
     print("Saving Model Dict...")
     torch.save(model.state_dict(), file_path)
 
-    model_file_path = args.dataset + "_" + args.encoder + "_" + args.decoder + \
+    model_filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                       "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                       "_" + str(args.feature_missing_rate) + "_model.pt"
+    model_file_path = task_type_dir + model_filename
     print("Saving Model...")
     torch.save(model, model_file_path)
 

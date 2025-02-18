@@ -54,7 +54,8 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
         model.train()
         # only encoder part
         # use missing feature to train
-        out = model(graph, x)
+        # out = model(graph, x)
+        out = model(x, graph.edge_index)
         loss = criterion(out[train_mask], labels[train_mask])
         optimizer.zero_grad()
         loss.backward()
@@ -64,7 +65,7 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
         with torch.no_grad():
             model.eval()
             # use original feature to val/test
-            pred = model(graph, ori_x)
+            pred = model(ori_x, graph.edge_index)
             val_acc = accuracy(pred[val_mask], labels[val_mask])
             val_loss = criterion(pred[val_mask], labels[val_mask])
             test_acc = accuracy(pred[test_mask], labels[test_mask])
@@ -81,7 +82,8 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
 
     best_model.eval()
     with torch.no_grad():
-        pred = best_model(graph, ori_x)
+        # use original feature to val/test
+        pred = model(ori_x, graph.edge_index)
         estp_test_acc = accuracy(pred[test_mask], labels[test_mask])
     if mute:
         print(
