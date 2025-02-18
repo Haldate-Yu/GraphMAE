@@ -197,13 +197,13 @@ class PreModel(nn.Module):
 
         return out_x, (mask_nodes, keep_nodes)
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, x_ori):
         # ---- attribute reconstruction ----
-        loss = self.mask_attr_prediction(x, edge_index)
+        loss = self.mask_attr_prediction(x, edge_index, x_ori)
         loss_item = {"loss": loss.item()}
         return loss, loss_item
 
-    def mask_attr_prediction(self, x, edge_index):
+    def mask_attr_prediction(self, x, edge_index, x_ori):
         use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(x, self._mask_rate)
 
         if self._drop_edge_rate > 0:
@@ -228,7 +228,11 @@ class PreModel(nn.Module):
         else:
             recon = self.decoder(rep, use_edge_index)
 
-        x_init = x[mask_nodes]
+        if x_ori is not None:
+            x_init = x_ori[mask_nodes]
+        else:
+            x_init = x[mask_nodes]
+
         x_rec = recon[mask_nodes]
 
         loss = self.criterion(x_rec, x_init)

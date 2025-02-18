@@ -14,8 +14,12 @@ import numpy as np
 
 from model import GNN, GNNDecoder
 
-from util import MaskAtom
+from util import MaskAtom, get_missing_feature_mask
 
+import warnings
+
+# ignore user warnings
+warnings.filterwarnings("ignore")
 
 def compute_accuracy(pred, target):
     return float(torch.sum(torch.max(pred.detach(), dim=1)[1] == target).cpu().item()) / len(pred)
@@ -56,7 +60,22 @@ def train_mae(args, model_list, loader, optimizer_list, device, alpha_l=1.0, los
     epoch_iter = tqdm(loader, desc="Iteration")
     for step, batch in enumerate(epoch_iter):
         batch = batch.to(device)
-        node_rep = model(batch.x, batch.edge_index, batch.edge_attr)
+        # transform x to graph with missing features
+        feat = batch.x.clone()
+        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                        type=args.feature_mask_type,
+                                                        n_nodes=feat.size()[0],
+                                                        n_features=batch.num_node_features, )
+        # zero-fill / random-fill
+        if args.feature_init_type == "zero":
+            feat[~missing_feature_mask] = float("0")
+        elif args.feature_init_type == "random":
+            init_x = torch.randn_like(feat)
+            feat[~missing_feature_mask] = init_x[~missing_feature_mask]
+        else:
+            raise ValueError(f"{args.feature_init_type} not implemented!")
+
+        node_rep = model(feat, batch.edge_index, batch.edge_attr)
 
         ## loss for nodes
         node_attr_label = batch.node_attr_label

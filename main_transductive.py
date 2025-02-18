@@ -13,6 +13,10 @@ from graphmae.utils import (
     TBLogger,
     get_current_lr,
     load_best_configs,
+    get_missing_feature_mask,
+    save_model_dict,
+    load_model_dict,
+    load_model
 )
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -23,12 +27,13 @@ def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_cl
     logging.info("start training..")
     graph = graph.to(device)
     x = feat.to(device)
+    ori_x = graph.x.clone()
 
     epoch_iter = tqdm(range(max_epoch))
 
     for epoch in epoch_iter:
         model.train()
-        loss, loss_dict = model(x, graph.edge_index)
+        loss, loss_dict = model(x, graph.edge_index, ori_x)
 
         optimizer.zero_grad()
         loss.backward()
@@ -103,8 +108,21 @@ def main(args):
         else:
             scheduler = None
 
-        x = graph.x
+        x = graph.x.clone()
         # todo transform x to graph with missing features
+        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+                                                        type=args.feature_mask_type,
+                                                        n_nodes=graph.num_nodes,
+                                                        n_features=x.shape[1], )
+        # zero-fill / random-fill
+        if args.feature_init_type == "zero":
+            x[~missing_feature_mask] = float("0")
+        elif args.feature_init_type == "random":
+            init_x = torch.randn_like(x)
+            x[~missing_feature_mask] = init_x[~missing_feature_mask]
+        else:
+            raise ValueError(f"{args.feature_init_type} not implemented!")
+
         if not load_model:
             model = pretrain(model, graph, x, optimizer, max_epoch, device, scheduler, num_classes, lr_f,
                              weight_decay_f, max_epoch_f, linear_prob, logger)
@@ -112,10 +130,12 @@ def main(args):
 
         if load_model:
             logging.info("Loading Model ... ")
-            model.load_state_dict(torch.load("checkpoint.pt"))
+            # model.load_state_dict(torch.load("checkpoint.pt"))
+            model = load_model_dict(args, model)
         if save_model:
-            logging.info("Saveing Model ...")
-            torch.save(model.state_dict(), "checkpoint.pt")
+            logging.info("Saving Model ...")
+            # torch.save(model.state_dict(), "checkpoint.pt")
+            save_model_dict(args, model)
 
         model = model.to(device)
         model.eval()
@@ -139,5 +159,6 @@ if __name__ == "__main__":
     args = build_args()
     if args.use_cfg:
         args = load_best_configs(args, "configs.yml")
+    args.model_prefix = "transductive"
     print(args)
     main(args)

@@ -291,6 +291,19 @@ class MaskAtom:
             self.mask_rate, self.mask_edge)
 
 
+def get_missing_feature_mask(rate, n_nodes, n_features, type="uniform"):
+    """
+    Return mask of shape [n_nodes, n_features] indicating whether each feature is present or missing.
+    If `type`='uniform', then each feature of each node is missing uniformly at random with probability `rate`.
+    Instead, if `type`='structural', either we observe all features for a node, or we observe none. For each node
+    there is a probability of `rate` of not observing any feature.
+    """
+    if type == "structural":  # either remove all of a nodes features or none
+        return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes)).bool().unsqueeze(1).repeat(1, n_features)
+    elif type == "uniform":
+        return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes, n_features)).bool()
+
+
 if __name__ == "__main__":
     transform = NegativeEdge()
     dataset = MoleculeDataset("dataset/tox21", dataset="tox21")
