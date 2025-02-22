@@ -240,7 +240,7 @@ class PreModel(nn.Module):
 
     def embed(self, x, edge_index):
         rep = self.encoder(x, edge_index)
-        return rep
+        return self.decoder(rep, edge_index)
 
     @property
     def enc_params(self):

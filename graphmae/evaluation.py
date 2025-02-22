@@ -20,7 +20,7 @@ def node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_de
 
     num_finetune_params = [p.numel() for p in encoder.parameters() if p.requires_grad]
     if not mute:
-        print(f"num parameters for finetuning: {sum(num_finetune_params)}")
+        print(f"num parameters for finetuneing: {sum(num_finetune_params)}")
 
     encoder.to(device)
     optimizer_f = create_optimizer("adam", encoder, lr_f, weight_decay_f)
@@ -101,6 +101,6 @@ class LogisticRegression(nn.Module):
         super().__init__()
         self.linear = nn.Linear(num_dim, num_class)
 
-    def forward(self, g, x, *args):
+    def forward(self, x, edge_index, *args):
         logits = self.linear(x)
         return logits
