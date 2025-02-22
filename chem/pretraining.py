@@ -1,3 +1,4 @@
+import os
 import argparse
 from functools import partial
 
@@ -178,7 +179,7 @@ def main():
     # loader = DataLoaderMasking(dataset, batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
     loader = DataLoaderMaskingPred(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers,
                                    mask_rate=args.mask_rate, mask_edge=args.mask_edge,
-                                   predefine="pagerank", max_epoch=args.epochs)
+                                   predefine=args.predefine, max_epoch=args.epochs)
 
     # set up models, one for pre-training and one for context embeddings
     model = (GNN(args.num_layer, args.emb_dim, JK=args.JK, drop_ratio=args.dropout_ratio, gnn_type=args.gnn_type)
@@ -220,7 +221,7 @@ def main():
 
     optimizer_list = [optimizer_model, optimizer_dec_pred_atoms, optimizer_dec_pred_bonds]
 
-    output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}.txt"
+    output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}"
 
     for epoch in range(1, args.epochs + 1):
         loader.train_one_epoch()
@@ -240,7 +241,11 @@ def main():
         if scheduler_dec is not None:
             scheduler_dec.step()
 
-    output_file = "./checkpoints/" + args.output_model_file + f"_{args.gnn_type}"
+    output_file = f"../pretrain_model/transfer_learning/{args.predefine}_{args.gnn_type}_{args.mask_rate}"
+    if not os.path.exists(os.path.dirname(output_file)):
+        os.makedirs(os.path.dirname(output_file))
+        print("Create directory:", os.path.dirname(output_file))
+
     if resume:
         torch.save(model.state_dict(), args.input_model_file.rsplit(".", 1)[0] + f"_resume_{args.epochs}.pth")
     elif not args.output_model_file == "":
