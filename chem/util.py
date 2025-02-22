@@ -320,15 +320,15 @@ class MaskAtom:
         data.node_attr_label = atom_type
 
         # modify the original node feature of the masked node
+        random_value = None
         if self.predefine == "random":
-            print("mask atom indices: {}\n".format(masked_atom_indices))
-            random_tensor = torch.rand((1, masked_atom_indices.shape[0]))
+            random_value = random.choices(range(0, 3), k=masked_atom_indices.shape[0])
 
-        for atom_idx in masked_atom_indices:
+        for index, atom_idx in enumerate(masked_atom_indices):
             if self.predefine == "zero":
                 data.x[atom_idx] = torch.tensor([self.num_atom_type, 0])
             elif self.predefine == "random":
-                data.x[atom_idx] = torch.tensor([self.num_atom_type, random.random()])
+                data.x[atom_idx] = torch.tensor([self.num_atom_type, random_value[index]])
 
         if self.mask_edge:
             # create mask edge labels by copying edge features of edges that are bonded to
@@ -392,7 +392,7 @@ def get_missing_feature_mask(rate, n_nodes, n_features, type="uniform"):
 
 if __name__ == "__main__":
     transform = NegativeEdge()
-    dataset = MoleculeDataset("dataset/tox21", dataset="tox21")
+    dataset = MoleculeDataset("../data/zinc_standard_agent", dataset="zinc")
     transform(dataset[0])
 
     """
