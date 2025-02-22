@@ -241,6 +241,12 @@ def main():
         if scheduler_dec is not None:
             scheduler_dec.step()
 
+    # save model
+    result_dir = "../pretrain_model/"
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+        print("Create directory:", result_dir)
+
     output_file = f"../pretrain_model/transfer_learning/{args.predefine}_{args.gnn_type}_{args.mask_rate}"
     if not os.path.exists(os.path.dirname(output_file)):
         os.makedirs(os.path.dirname(output_file))
