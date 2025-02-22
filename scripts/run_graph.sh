@@ -1,28 +1,39 @@
-dataset=$1
-device=$2
+device=$1
 
-[ -z "${dataset}" ] && dataset="MUTAG"
-[ -z "${device}" ] && device=-1
+if [ -z "$1" ]; then
+  echo "empty cuda input!"
+  device=0
+else
+  device=$1
+fi
 
-python main_graph.py \
-	--device $device \
-	--dataset $dataset \
-	--mask_rate 0.5 \
-	--encoder "gin" \
-	--decoder "gin" \
-	--in_drop 0.2 \
-	--attn_drop 0.1 \
-	--num_layers 2 \
-	--num_hidden 512 \
-	--num_heads 2 \
-	--max_epoch 100 \
-	--max_epoch_f 0 \
-	--lr 0.00015 \
-	--weight_decay 0.0 \
-	--activation prelu \
-	--optimizer adam \
-	--drop_edge_rate 0.0 \
-	--loss_fn "sce" \
-	--seeds 0 1 2 3 4 \
-	--linear_prob \
-	--use_cfg \
+for dataset in "IMDB-BINARY" "IMDB-MULTI" "PROTEINS" "MUTAG" "NCI1" "REDDIT-BINERY" "COLLAB"; do
+  for fill_method in "zero" "random"; do
+    for mask_type in "uniform" "structural"; do
+      python main_graph.py \
+        --device $device \
+        --dataset $dataset \
+        --mask_rate 0.5 \
+        --encoder "gin" \
+        --decoder "gin" \
+        --in_drop 0.2 \
+        --attn_drop 0.1 \
+        --num_layers 2 \
+        --num_hidden 512 \
+        --num_heads 2 \
+        --max_epoch 100 \
+        --max_epoch_f 0 \
+        --lr 0.00015 \
+        --weight_decay 0.0 \
+        --activation prelu \
+        --optimizer adam \
+        --drop_edge_rate 0.0 \
+        --loss_fn "sce" \
+        --seeds 0 1 2 3 4 \
+        --linear_prob \
+        --use_cfg \
+        --feature_init_type $fill_method \
+        --feature_mask_type $mask_type
+    done
+  done
+done

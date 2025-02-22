@@ -187,11 +187,11 @@ def main(args):
             model = pretrain(model, pooler, (train_loader, eval_loader), optimizer, max_epoch, device, scheduler,
                              num_classes, lr_f, weight_decay_f, max_epoch_f, linear_prob, logger)
             model = model.cpu()
-
-        if load_model:
+        else:
             logging.info("Loading Model ... ")
             # model.load_state_dict(torch.load("checkpoint.pt"))
             model = load_model_dict(args, model)
+
         if save_model:
             logging.info("Saving Model ...")
             # torch.save(model.state_dict(), "checkpoint.pt")
