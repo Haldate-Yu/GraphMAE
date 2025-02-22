@@ -190,7 +190,7 @@ class PreModel(nn.Module):
         else:
             raise NotImplementedError("missing feature type {} not implemented!".format(self.missing_feature_type))
 
-        return node_mask, masked_nodes, unmasked_nodes
+        return node_mask, masked_nodes.to(x.device), unmasked_nodes.to(x.device)
 
     def encoding_mask_noise(self, x, mask_rate=0.3):
         num_nodes = x.shape[0]
@@ -206,7 +206,7 @@ class PreModel(nn.Module):
 
         # mask method
         out_x = x.clone()
-        random_mask = torch.rand_like(x)
+        random_mask = torch.rand_like(x).to(x.device)
         if self._replace_rate > 0:
             num_noise_nodes = int(self._replace_rate * num_mask_nodes)
             perm_mask = torch.randperm(num_mask_nodes, device=x.device)
