@@ -18,7 +18,7 @@ def scale_feats(x):
 
 def load_dataset(dataset_name):
     if dataset_name == "ogbn-arxiv":
-        dataset = PygNodePropPredDataset(name='ogbn-arxiv', root="./data")
+        dataset = PygNodePropPredDataset(name='ogbn-arxiv', root="../data")
         graph = dataset[0]
         num_nodes = graph.x.shape[0]
         graph.edge_index = to_undirected(graph.edge_index)
@@ -37,7 +37,7 @@ def load_dataset(dataset_name):
         graph.y = graph.y.view(-1)
         graph.x = scale_feats(graph.x)
     else:
-        dataset = Planetoid("", dataset_name, transform=T.NormalizeFeatures())
+        dataset = Planetoid("../data", dataset_name, transform=T.NormalizeFeatures())
         graph = dataset[0]
         graph.edge_index = remove_self_loops(graph.edge_index)[0]
         graph.edge_index = add_self_loops(graph.edge_index)[0]
@@ -49,7 +49,7 @@ def load_dataset(dataset_name):
 
 def load_graph_classification_dataset(dataset_name, deg4feat=False):
     dataset_name = dataset_name.upper()
-    dataset = TUDataset(root="./data", name=dataset_name)
+    dataset = TUDataset(root="../data", name=dataset_name)
     dataset = list(dataset)
     graph = dataset[0]
 

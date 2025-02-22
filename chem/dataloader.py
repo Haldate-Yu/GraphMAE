@@ -57,8 +57,16 @@ class DataLoaderMaskingPred(torch.utils.data.DataLoader):
             reshuffled at every epoch (default: :obj:`True`)
     """
 
-    def __init__(self, dataset, batch_size=1, shuffle=True, mask_rate=0.0, mask_edge=0.0, **kwargs):
-        self._transform = MaskAtom(num_atom_type=119, num_edge_type=5, mask_rate=mask_rate, mask_edge=mask_edge)
+    def __init__(self, dataset, batch_size=1, shuffle=True,
+                 mask_rate=0.0, mask_edge=0.0,
+                 predefine="pagerank", max_epoch=100,
+                 **kwargs):
+        # record the current epoch number
+        self.current_epoch = 0
+        self.predefine = predefine
+        self._transform = MaskAtom(num_atom_type=119, num_edge_type=5,
+                                   mask_rate=mask_rate, mask_edge=mask_edge,
+                                   predefine=predefine, max_epoch=max_epoch)
         super(DataLoaderMaskingPred, self).__init__(
             dataset,
             batch_size,
@@ -67,8 +75,17 @@ class DataLoaderMaskingPred(torch.utils.data.DataLoader):
             **kwargs)
 
     def collate_fn(self, batches):
-        batchs = [self._transform(x) for x in batches]
+        # todo increasing mask rate following the training process
+        if self.predefine == "pagerank":
+            batchs = [self._transform(x, self.current_epoch) for x in batches]
+        else:
+            batchs = [self._transform(x) for x in batches]
+
         return BatchMasking.from_data_list(batchs)
+
+    def train_one_epoch(self):
+        # Call this method at the end of each epoch to update the epoch count
+        self.current_epoch += 1
 
 
 class DataLoaderAE(torch.utils.data.DataLoader):

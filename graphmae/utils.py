@@ -39,7 +39,7 @@ def build_args():
     parser.add_argument("--seeds", type=int, nargs="+", default=[0])
     parser.add_argument("--dataset", type=str, default="cora")
     parser.add_argument("--device", type=int, default=-1)
-    parser.add_argument("--max_epoch", type=int, default=200,
+    parser.add_argument("--max_epoch", type=int, default=300,
                         help="number of training epochs")
     parser.add_argument("--warmup_steps", type=int, default=-1)
 
@@ -47,9 +47,9 @@ def build_args():
                         help="number of hidden attention heads")
     parser.add_argument("--num_out_heads", type=int, default=1,
                         help="number of output attention heads")
-    parser.add_argument("--num_layers", type=int, default=2,
+    parser.add_argument("--num_layers", type=int, default=3,
                         help="number of hidden layers")
-    parser.add_argument("--num_hidden", type=int, default=256,
+    parser.add_argument("--num_hidden", type=int, default=1024,
                         help="number of hidden units")
     parser.add_argument("--residual", action="store_true", default=False,
                         help="use residual connection")
@@ -101,7 +101,6 @@ def build_args():
         "--feature_mask_type", type=str, help="Type of missing feature mask", default="uniform",
         choices=["uniform", "structural"],
     )
-    parser.add_argument("--feature_missing_rate", type=float, help="Rate of node features missing", default=0.99)
 
     # save model args
     parser.add_argument("--model_prefix", type=str, help="Save Model folder prefix")
@@ -284,7 +283,7 @@ def save_model_dict(args, model):
 
     filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
-               "_" + str(args.feature_missing_rate) + ".pt"
+               "_" + str(args.mask_rate) + ".pt"
     print("file_name: {}".format(filename))
     file_path = task_type_dir + filename
 

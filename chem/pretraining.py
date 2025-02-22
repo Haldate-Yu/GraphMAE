@@ -21,6 +21,7 @@ import warnings
 # ignore user warnings
 warnings.filterwarnings("ignore")
 
+
 def compute_accuracy(pred, target):
     return float(torch.sum(torch.max(pred.detach(), dim=1)[1] == target).cpu().item()) / len(pred)
 
@@ -62,18 +63,18 @@ def train_mae(args, model_list, loader, optimizer_list, device, alpha_l=1.0, los
         batch = batch.to(device)
         # transform x to graph with missing features
         feat = batch.x.clone()
-        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
-                                                        type=args.feature_mask_type,
-                                                        n_nodes=feat.size()[0],
-                                                        n_features=batch.num_node_features, )
-        # zero-fill / random-fill
-        if args.feature_init_type == "zero":
-            feat[~missing_feature_mask] = float("0")
-        elif args.feature_init_type == "random":
-            init_x = torch.randn_like(feat)
-            feat[~missing_feature_mask] = init_x[~missing_feature_mask]
-        else:
-            raise ValueError(f"{args.feature_init_type} not implemented!")
+        # missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+        #                                                 type=args.feature_mask_type,
+        #                                                 n_nodes=feat.size()[0],
+        #                                                 n_features=batch.num_node_features, )
+        # # zero-fill / random-fill
+        # if args.feature_init_type == "zero":
+        #     feat[~missing_feature_mask] = float("0")
+        # elif args.feature_init_type == "random":
+        #     init_x = torch.randn_like(feat)
+        #     feat[~missing_feature_mask] = init_x[~missing_feature_mask]
+        # else:
+        #     raise ValueError(f"{args.feature_init_type} not implemented!")
 
         node_rep = model(feat, batch.edge_index, batch.edge_attr)
 
@@ -148,36 +149,40 @@ def main():
                         help='root directory of dataset for pretraining')
     parser.add_argument('--output_model_file', type=str, default='', help='filename to output the model')
     parser.add_argument('--gnn_type', type=str, default="gin")
-    parser.add_argument('--seed', type=int, default=0, help="Seed for splitting dataset.")
+    parser.add_argument('--seed', type=int, default=42, help="Seed for splitting dataset.")
     parser.add_argument('--num_workers', type=int, default=8, help='number of workers for dataset loading')
     parser.add_argument('--input_model_file', type=str, default=None)
     parser.add_argument("--alpha_l", type=float, default=1.0)
     parser.add_argument("--loss_fn", type=str, default="sce")
     parser.add_argument("--decoder", type=str, default="gin")
     parser.add_argument("--use_scheduler", action="store_true", default=False)
+
+    # todo predefine pagerank method
+    parser.add_argument("--predefine", type=str, default="zero", choices=["zero", "pagerank", "random"],)
     args = parser.parse_args()
     print(args)
 
-    torch.manual_seed(0)
-    np.random.seed(0)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(0)
+        torch.cuda.manual_seed_all(args.seed)
 
     print("num layer: %d mask rate: %f mask edge: %d" % (args.num_layer, args.mask_rate, args.mask_edge))
 
     dataset_name = args.dataset
     # set up dataset and transform function.
     # dataset = MoleculeDataset("dataset/" + args.dataset, dataset=args.dataset, transform = MaskAtom(num_atom_type = 119, num_edge_type = 5, mask_rate = args.mask_rate, mask_edge=args.mask_edge))
-    dataset = MoleculeDataset("dataset/" + dataset_name, dataset=dataset_name)
+    dataset = MoleculeDataset("../../data/" + dataset_name, dataset=dataset_name)
 
     # loader = DataLoaderMasking(dataset, batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
     loader = DataLoaderMaskingPred(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers,
-                                   mask_rate=args.mask_rate, mask_edge=args.mask_edge)
+                                   mask_rate=args.mask_rate, mask_edge=args.mask_edge,
+                                   predefine="pagerank", max_epoch=args.epochs)
 
     # set up models, one for pre-training and one for context embeddings
-    model = GNN(args.num_layer, args.emb_dim, JK=args.JK, drop_ratio=args.dropout_ratio, gnn_type=args.gnn_type).to(
-        device)
+    model = (GNN(args.num_layer, args.emb_dim, JK=args.JK, drop_ratio=args.dropout_ratio, gnn_type=args.gnn_type)
+             .to(device))
     # linear_pred_atoms = torch.nn.Linear(args.emb_dim, 119).to(device)
     # linear_pred_bonds = torch.nn.Linear(args.emb_dim, 4).to(device)
     if args.input_model_file is not None and args.input_model_file != "":
@@ -215,9 +220,10 @@ def main():
 
     optimizer_list = [optimizer_model, optimizer_dec_pred_atoms, optimizer_dec_pred_bonds]
 
-    output_file_temp = "./checkpoints/" + args.output_model_file + f"_{args.gnn_type}"
+    output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}.txt"
 
     for epoch in range(1, args.epochs + 1):
+        loader.train_one_epoch()
         print("====epoch " + str(epoch))
 
         # train_loss, train_acc_atom, train_acc_bond = train(args, model_list, loader, optimizer_list, device)

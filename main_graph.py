@@ -88,25 +88,25 @@ def pretrain(model, pooler, dataloaders, optimizer, max_epoch, device, scheduler
             batch_g = batch
             batch_g = batch_g.to(device)
 
-            ori_feat = batch_g.x
+            # ori_feat = batch_g.x
             # transform x to graph with missing features
             feat = batch_g.x.clone()
-            missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
-                                                            type=args.feature_mask_type,
-                                                            n_nodes=batch_g.num_nodes,
-                                                            n_features=ori_feat.shape[1], )
-
-            # zero-fill / random-fill
-            if args.feature_init_type == "zero":
-                feat[~missing_feature_mask] = float("0")
-            elif args.feature_init_type == "random":
-                init_x = torch.randn_like(feat)
-                feat[~missing_feature_mask] = init_x[~missing_feature_mask]
-            else:
-                raise ValueError(f"{args.feature_init_type} not implemented!")
+            # missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+            #                                                 type=args.feature_mask_type,
+            #                                                 n_nodes=batch_g.num_nodes,
+            #                                                 n_features=ori_feat.shape[1], )
+            #
+            # # zero-fill / random-fill
+            # if args.feature_init_type == "zero":
+            #     feat[~missing_feature_mask] = float("0")
+            # elif args.feature_init_type == "random":
+            #     init_x = torch.randn_like(feat)
+            #     feat[~missing_feature_mask] = init_x[~missing_feature_mask]
+            # else:
+            #     raise ValueError(f"{args.feature_init_type} not implemented!")
 
             model.train()
-            loss, loss_dict = model(feat, batch_g.edge_index, ori_feat)
+            loss, loss_dict = model(feat, batch_g.edge_index)
 
             optimizer.zero_grad()
             loss.backward()

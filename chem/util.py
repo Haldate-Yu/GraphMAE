@@ -1,11 +1,62 @@
 import networkx as nx
 import random
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 from rdkit.Chem import AllChem
 
 from loader import MoleculeDataset
 from loader import graph_data_obj_to_nx_simple, nx_to_graph_data_obj_simple
+from torch_scatter import scatter_add, scatter_max
+
+
+# from torch_geometric.nn.pool.topk_pool import topk
+
+
+def topk(x, ratio, batch, min_score=None, tol=1e-7):
+    if min_score is not None:
+        # Make sure that we do not drop all nodes in a graph.
+        scores_max = scatter_max(x, batch)[0].index_select(0, batch) - tol
+        scores_min = scores_max.clamp(max=min_score)
+
+        perm = (x > scores_min).nonzero(as_tuple=False).view(-1)
+    else:
+        num_nodes = scatter_add(batch.new_ones(x.size(0)), batch, dim=0)
+        batch_size, max_num_nodes = num_nodes.size(0), num_nodes.max().item()
+
+        cum_num_nodes = torch.cat(
+            [num_nodes.new_zeros(1),
+             num_nodes.cumsum(dim=0)[:-1]], dim=0)
+
+        index = torch.arange(batch.size(0), dtype=torch.long, device=x.device)
+        index = (index - cum_num_nodes[batch]) + (batch * max_num_nodes)
+
+        dense_x = x.new_full((batch_size * max_num_nodes,),
+                             torch.finfo(x.dtype).min)
+        dense_x[index] = x
+        dense_x = dense_x.view(batch_size, max_num_nodes)
+
+        _, perm = dense_x.sort(dim=-1, descending=True)
+
+        perm = perm + cum_num_nodes.view(-1, 1)
+        perm = perm.view(-1)
+
+        if isinstance(ratio, int):
+            k = num_nodes.new_full((num_nodes.size(0),), ratio)
+            k = torch.min(k, num_nodes)
+        else:
+            k = (ratio * num_nodes.to(torch.float)).ceil().to(torch.long)
+
+        mask = [
+            torch.arange(k[i], dtype=torch.long, device=x.device) +
+            i * max_num_nodes for i in range(batch_size)
+        ]
+        mask = torch.cat(mask, dim=0)
+
+        perm = perm[mask]
+
+    return perm
 
 
 def check_same_molecules(s1, s2):
@@ -182,7 +233,7 @@ def reset_idxes(G):
 
 # TODO(Bowen): more unittests
 class MaskAtom:
-    def __init__(self, num_atom_type, num_edge_type, mask_rate, mask_edge=True):
+    def __init__(self, num_atom_type, num_edge_type, mask_rate, mask_edge=True, predefine="pagerank", max_epoch=100):
         """
         Randomly masks an atom, and optionally masks edges connecting to it.
         The mask atom type index is num_possible_atom_type
@@ -201,7 +252,10 @@ class MaskAtom:
         self.num_chirality_tag = 3
         self.num_bond_direction = 3
 
-    def __call__(self, data, masked_atom_indices=None):
+        self.predefine = predefine
+        self.max_epoch = max_epoch
+
+    def __call__(self, data, epoch=None, masked_atom_indices=None):
         """
 
         :param data: pytorch geometric data object. Assume that the edge
@@ -227,6 +281,31 @@ class MaskAtom:
             sample_size = int(num_atoms * self.mask_rate + 1)
             masked_atom_indices = random.sample(range(num_atoms), sample_size)
 
+            if self.predefine == "pagerank":
+                # calculate the pagerank score of the graph
+                g = nx.Graph()
+                edge_clone = data.edge_index.clone().detach()
+                g.add_edges_from(edge_clone.t().tolist())
+
+                pr = nx.pagerank(g)
+                pagerank_values = []
+                for i in range(num_atoms):
+                    pagerank_values.append(pr[i])
+
+                scores = torch.tensor(pagerank_values).to(data.x.device)
+                if epoch is not None:
+                    # increase the mask rate with the epoch
+                    tmp_mask_rate = self.mask_rate * np.sqrt(epoch / self.max_epoch)
+                    batch = torch.zeros(num_atoms, dtype=torch.int64).to(data.x.device)
+                    # choose the nodes to be masked based on the pagerank score
+                    throw_nodes_first = topk(scores, tmp_mask_rate, batch).to(data.x.device)
+                    # generate random node scores
+                    tmp_scores = torch.tensor(np.random.uniform(0, 1, num_atoms)).to(data.x.device)
+                    # add the pagerank score to the random node scores
+                    # tmp_scores[throw_nodes_first] += self.alpha
+                    # choose the nodes to be masked based on the combined scores
+                    masked_atom_indices = topk(tmp_scores, self.mask_rate, batch).to(data.x.device)
+
         # create mask node label by copying atom feature of mask atom
         mask_node_labels_list = []
         for atom_idx in masked_atom_indices:
@@ -241,8 +320,15 @@ class MaskAtom:
         data.node_attr_label = atom_type
 
         # modify the original node feature of the masked node
+        if self.predefine == "random":
+            print("mask atom indices: {}\n".format(masked_atom_indices))
+            random_tensor = torch.rand((1, masked_atom_indices.shape[0]))
+
         for atom_idx in masked_atom_indices:
-            data.x[atom_idx] = torch.tensor([self.num_atom_type, 0])
+            if self.predefine == "zero":
+                data.x[atom_idx] = torch.tensor([self.num_atom_type, 0])
+            elif self.predefine == "random":
+                data.x[atom_idx] = torch.tensor([self.num_atom_type, random.random()])
 
         if self.mask_edge:
             # create mask edge labels by copying edge features of edges that are bonded to

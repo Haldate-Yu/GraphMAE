@@ -27,13 +27,12 @@ def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_cl
     logging.info("start training..")
     graph = graph.to(device)
     x = feat.to(device)
-    ori_x = graph.x.clone()
 
     epoch_iter = tqdm(range(max_epoch))
 
     for epoch in epoch_iter:
         model.train()
-        loss, loss_dict = model(x, graph.edge_index, ori_x)
+        loss, loss_dict = model(x, graph.edge_index)
 
         optimizer.zero_grad()
         loss.backward()
@@ -47,6 +46,7 @@ def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_cl
             logger.note(loss_dict, step=epoch)
 
         if (epoch + 1) % 200 == 0:
+            # todo check if this is correct
             node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
                                            linear_prob, mute=True)
 
@@ -109,19 +109,19 @@ def main(args):
             scheduler = None
 
         x = graph.x.clone()
-        # todo transform x to graph with missing features
-        missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
-                                                        type=args.feature_mask_type,
-                                                        n_nodes=graph.num_nodes,
-                                                        n_features=x.shape[1], )
+        # transform x to graph with missing features
+        # missing_feature_mask = get_missing_feature_mask(rate=args.feature_missing_rate,
+        #                                                 type=args.feature_mask_type,
+        #                                                 n_nodes=graph.num_nodes,
+        #                                                 n_features=x.shape[1], )
         # zero-fill / random-fill
-        if args.feature_init_type == "zero":
-            x[~missing_feature_mask] = float("0")
-        elif args.feature_init_type == "random":
-            init_x = torch.randn_like(x)
-            x[~missing_feature_mask] = init_x[~missing_feature_mask]
-        else:
-            raise ValueError(f"{args.feature_init_type} not implemented!")
+        # if args.feature_init_type == "zero":
+        #     x[~missing_feature_mask] = float("0")
+        # elif args.feature_init_type == "random":
+        #     init_x = torch.randn_like(x)
+        #     x[~missing_feature_mask] = init_x[~missing_feature_mask]
+        # else:
+        #     raise ValueError(f"{args.feature_init_type} not implemented!")
 
         if not load_model:
             model = pretrain(model, graph, x, optimizer, max_epoch, device, scheduler, num_classes, lr_f,

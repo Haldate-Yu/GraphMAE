@@ -34,7 +34,6 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
 
     graph = graph.to(device)
     x = feat.to(device)
-    ori_x = graph.x.clone().to(device)
 
     train_mask = graph.train_mask
     val_mask = graph.val_mask
@@ -53,8 +52,6 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
     for epoch in epoch_iter:
         model.train()
         # only encoder part
-        # use missing feature to train
-        # out = model(graph, x)
         out = model(x, graph.edge_index)
         loss = criterion(out[train_mask], labels[train_mask])
         optimizer.zero_grad()
@@ -65,7 +62,7 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
         with torch.no_grad():
             model.eval()
             # use original feature to val/test
-            pred = model(ori_x, graph.edge_index)
+            pred = model(x, graph.edge_index)
             val_acc = accuracy(pred[val_mask], labels[val_mask])
             val_loss = criterion(pred[val_mask], labels[val_mask])
             test_acc = accuracy(pred[test_mask], labels[test_mask])
@@ -83,14 +80,14 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
     best_model.eval()
     with torch.no_grad():
         # use original feature to val/test
-        pred = model(ori_x, graph.edge_index)
+        pred = model(x, graph.edge_index)
         estp_test_acc = accuracy(pred[test_mask], labels[test_mask])
     if mute:
         print(
-            f"# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
+            f"\n# IGNORE: --- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
     else:
         print(
-            f"--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
+            f"\n--- TestAcc: {test_acc:.4f}, early-stopping-TestAcc: {estp_test_acc:.4f}, Best ValAcc: {best_val_acc:.4f} in epoch {best_val_epoch} --- ")
 
     # (final_acc, es_acc, best_acc)
     return test_acc, estp_test_acc
@@ -101,6 +98,6 @@ class LogisticRegression(nn.Module):
         super().__init__()
         self.linear = nn.Linear(num_dim, num_class)
 
-    def forward(self, g, x, *args):
+    def forward(self, x, edge_index, *args):
         logits = self.linear(x)
         return logits

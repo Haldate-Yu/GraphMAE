@@ -84,6 +84,8 @@ class PreModel(nn.Module):
             replace_rate: float = 0.1,
             alpha_l: float = 2,
             concat_hidden: bool = False,
+            missing_feature_type: str = "uniform",
+            init_feature_method: str = "zero",
     ):
         super(PreModel, self).__init__()
         self._mask_rate = mask_rate
@@ -155,6 +157,10 @@ class PreModel(nn.Module):
         # * setup loss function
         self.criterion = self.setup_loss_fn(loss_fn, alpha_l)
 
+        # setup missing feature type
+        self.missing_feature_type = missing_feature_type
+        self.init_feature_method = init_feature_method
+
     @property
     def output_hidden_dim(self):
         return self._output_hidden_size
@@ -168,42 +174,76 @@ class PreModel(nn.Module):
             raise NotImplementedError
         return criterion
 
+    def get_missing_feature_mask(self, x, mask_rate=0.3):
+        num_nodes = x.shape[0]
+        num_features = x.shape[1]
+        node_mask, masked_nodes, unmasked_nodes = None, None, None
+        if self.missing_feature_type == "structural":  # either remove all of a nodes features or none
+            node_mask = (torch.bernoulli(torch.Tensor([1 - mask_rate]).repeat(num_nodes)).bool().unsqueeze(1)
+                         .repeat(1, num_features))
+            masked_nodes = (node_mask.sum(dim=1) == num_features).nonzero(as_tuple=True)[0]
+            unmasked_nodes = (node_mask.sum(dim=1) < num_features).nonzero(as_tuple=True)[0]
+        elif self.missing_feature_type == "uniform":
+            node_mask = torch.bernoulli(torch.Tensor([1 - mask_rate]).repeat(num_nodes, num_features)).bool()
+            masked_nodes = node_mask[:, 0].nonzero(as_tuple=True)[0]
+            unmasked_nodes = (~node_mask[:, 0]).nonzero(as_tuple=True)[0]
+        else:
+            raise NotImplementedError("missing feature type {} not implemented!".format(self.missing_feature_type))
+
+        return node_mask, masked_nodes, unmasked_nodes
+
     def encoding_mask_noise(self, x, mask_rate=0.3):
         num_nodes = x.shape[0]
-        perm = torch.randperm(num_nodes, device=x.device)
-        num_mask_nodes = int(mask_rate * num_nodes)
+        # perm = torch.randperm(num_nodes, device=x.device)
+        # num_mask_nodes = int(mask_rate * num_nodes)
 
         # random masking
-        num_mask_nodes = int(mask_rate * num_nodes)
-        mask_nodes = perm[: num_mask_nodes]
-        keep_nodes = perm[num_mask_nodes:]
+        # num_mask_nodes = int(mask_rate * num_nodes)
+        # mask_nodes = perm[: num_mask_nodes]
+        # keep_nodes = perm[num_mask_nodes:]
+        mask, mask_nodes, keep_nodes = self.get_missing_feature_mask(x, mask_rate)
+        num_mask_nodes = mask_nodes.shape[0]
 
+        # mask method
+        out_x = x.clone()
+        random_mask = torch.rand_like(x)
         if self._replace_rate > 0:
             num_noise_nodes = int(self._replace_rate * num_mask_nodes)
             perm_mask = torch.randperm(num_mask_nodes, device=x.device)
             token_nodes = mask_nodes[perm_mask[: int(self._mask_token_rate * num_mask_nodes)]]
             noise_nodes = mask_nodes[perm_mask[-int(self._replace_rate * num_mask_nodes):]]
-            noise_to_be_chosen = torch.randperm(num_nodes, device=x.device)[:num_noise_nodes]
 
-            out_x = x.clone()
-            out_x[token_nodes] = 0.0
+            # use mask values to replace
+            if self.init_feature_method == "zero":
+                out_x[token_nodes] = 0.0
+            elif self.init_feature_method == "random":
+                out_x[token_nodes] = random_mask[token_nodes]
+            else:
+                raise NotImplementedError("init feature method {} not implemented!".format(self.init_feature_method))
+
+            noise_to_be_chosen = torch.randperm(num_nodes, device=x.device)[:num_noise_nodes]
             out_x[noise_nodes] = x[noise_to_be_chosen]
         else:
-            out_x = x.clone()
             token_nodes = mask_nodes
-            out_x[mask_nodes] = 0.0
+            # use mask values to replace
+            if self.init_feature_method == "zero":
+                out_x[token_nodes] = 0.0
+            elif self.init_feature_method == "random":
+                out_x[token_nodes] = random_mask[token_nodes]
+            else:
+                raise NotImplementedError("init feature method {} not implemented!".format(self.init_feature_method))
 
         out_x[token_nodes] += self.enc_mask_token
 
         return out_x, (mask_nodes, keep_nodes)
 
-    def forward(self, x, edge_index, x_ori):
+    def forward(self, x, edge_index):
         # ---- attribute reconstruction ----
-        loss = self.mask_attr_prediction(x, edge_index, x_ori)
+        loss = self.mask_attr_prediction(x, edge_index)
         loss_item = {"loss": loss.item()}
         return loss, loss_item
 
-    def mask_attr_prediction(self, x, edge_index, x_ori):
+    def mask_attr_prediction(self, x, edge_index):
         use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(x, self._mask_rate)
 
         if self._drop_edge_rate > 0:
@@ -221,6 +261,7 @@ class PreModel(nn.Module):
 
         if self._decoder_type not in ("mlp", "linear"):
             # * remask, re-mask
+            # todo using feature mask to remask
             rep[mask_nodes] = 0
 
         if self._decoder_type in ("mlp", "linear"):
@@ -228,10 +269,7 @@ class PreModel(nn.Module):
         else:
             recon = self.decoder(rep, use_edge_index)
 
-        if x_ori is not None:
-            x_init = x_ori[mask_nodes]
-        else:
-            x_init = x[mask_nodes]
+        x_init = x[mask_nodes]
 
         x_rec = recon[mask_nodes]
 
