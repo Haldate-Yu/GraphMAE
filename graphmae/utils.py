@@ -266,7 +266,7 @@ def get_missing_feature_mask(rate, n_nodes, n_features, type="uniform"):
         return torch.bernoulli(torch.Tensor([1 - rate]).repeat(n_nodes, n_features)).bool()
 
 
-def save_model_dict(args, model):
+def save_model_dict(args, model, seed=42):
     result_dir = "./pretrain_model/"
     if not os.path.exists(result_dir):
         print("=" * 20)
@@ -283,7 +283,7 @@ def save_model_dict(args, model):
 
     filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
-               "_" + str(args.mask_rate) + ".pt"
+               "_" + str(args.mask_rate) + "_" + str(seed) + ".pt"
     print("file_name: {}".format(filename))
     file_path = task_type_dir + filename
 
@@ -291,14 +291,14 @@ def save_model_dict(args, model):
     torch.save(model.state_dict(), file_path)
 
     model_filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
-                      "_" + args.feature_init_type + "_" + args.feature_mask_type + \
-                      "_" + str(args.mask_rate) + "_model.pt"
+                     "_" + args.feature_init_type + "_" + args.feature_mask_type + \
+                     "_" + str(args.mask_rate) + "_" + str(seed) + "_model.pt"
     model_file_path = task_type_dir + model_filename
     print("Saving Model...")
     torch.save(model, model_file_path)
 
 
-def load_model_dict(args, model):
+def load_model_dict(args, model, seed=42):
     result_dir = "./pretrain_model/"
     if not os.path.exists(result_dir):
         raise ValueError("Result dir not exist!")
@@ -309,7 +309,7 @@ def load_model_dict(args, model):
 
     filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
-               "_" + args.mask_rate + ".pt"
+               "_" + args.mask_rate + "_" + str(seed) + ".pt"
 
     file_path = task_type_dir + filename
     if not os.path.exists(file_path):
@@ -319,7 +319,7 @@ def load_model_dict(args, model):
     return model
 
 
-def load_model(args, model):
+def load_model(args, model, seed=42):
     result_dir = "./pretrain_model/"
     if not os.path.exists(result_dir):
         raise ValueError("Result dir not exist!")
@@ -330,7 +330,7 @@ def load_model(args, model):
 
     model_file_path = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                       "_" + args.feature_init_type + "_" + args.feature_mask_type + \
-                      "_" + args.mask_rate + "_model.pt"
+                      "_" + args.mask_rate + "_" + str(seed) + "_model.pt"
 
     file_path = task_type_dir + model_file_path
     if not os.path.exists(file_path):

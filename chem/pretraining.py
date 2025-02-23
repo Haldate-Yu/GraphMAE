@@ -221,7 +221,7 @@ def main():
 
     optimizer_list = [optimizer_model, optimizer_dec_pred_atoms, optimizer_dec_pred_bonds]
 
-    output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}"
+    output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}_{args.seed}"
 
     for epoch in range(1, args.epochs + 1):
         loader.train_one_epoch()
@@ -247,7 +247,7 @@ def main():
         os.makedirs(result_dir)
         print("Create directory:", result_dir)
 
-    output_file = f"../pretrain_model/transfer_learning/{args.predefine}_{args.gnn_type}_{args.mask_rate}"
+    output_file = f"../pretrain_model/transfer_learning/{args.predefine}_{args.gnn_type}_{args.mask_rate}_{args.seed}"
     if not os.path.exists(os.path.dirname(output_file)):
         os.makedirs(os.path.dirname(output_file))
         print("Create directory:", os.path.dirname(output_file))

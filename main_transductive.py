@@ -131,11 +131,11 @@ def main(args):
         if load_model:
             logging.info("Loading Model ... ")
             # model.load_state_dict(torch.load("checkpoint.pt"))
-            model = load_model_dict(args, model)
+            model = load_model_dict(args, model, seed)
         if save_model:
             logging.info("Saving Model ...")
             # torch.save(model.state_dict(), "checkpoint.pt")
-            save_model_dict(args, model)
+            save_model_dict(args, model, seed)
 
         model = model.to(device)
         model.eval()
