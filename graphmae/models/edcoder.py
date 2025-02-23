@@ -1,18 +1,15 @@
 import torch
 import torch.nn as nn
+from torch import Tensor
 from functools import partial
 from itertools import chain
-from torch_geometric.utils import add_self_loops
-from torch_geometric.utils import dropout_edge
-from typing import Optional
 
-from graphmae.utils import create_norm
 from .gat import GAT
 from .gin import GIN
 from .loss_func import sce_loss
 from graphmae.utils import create_norm
-from torch_geometric.utils import dropout_adj as dropout_edge
-from torch_geometric.utils import add_self_loops, remove_self_loops
+from typing import Optional, Tuple
+from torch_geometric.utils import add_self_loops, remove_self_loops, dropout_edge
 
 
 def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead,
@@ -247,7 +244,7 @@ class PreModel(nn.Module):
         use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(x, self._mask_rate)
 
         if self._drop_edge_rate > 0:
-            use_edge_index, masked_edges = dropout_edge(edge_index, self._drop_edge_rate)
+            use_edge_index, masked_edges = dropout_edge_pyg(edge_index, self._drop_edge_rate)
             use_edge_index = add_self_loops(use_edge_index)[0]
         else:
             use_edge_index = edge_index
@@ -287,3 +284,68 @@ class PreModel(nn.Module):
     @property
     def dec_params(self):
         return chain(*[self.encoder_to_decoder.parameters(), self.decoder.parameters()])
+
+
+# dropout_edge function from pyg 2.6.1
+def dropout_edge_pyg(edge_index: Tensor, p: float = 0.5,
+                     force_undirected: bool = False,
+                     training: bool = True) -> Tuple[Tensor, Tensor]:
+    r"""Randomly drops edges from the adjacency matrix
+    :obj:`edge_index` with probability :obj:`p` using samples from
+    a Bernoulli distribution.
+
+    The method returns (1) the retained :obj:`edge_index`, (2) the edge mask
+    or index indicating which edges were retained, depending on the argument
+    :obj:`force_undirected`.
+
+    Args:
+        edge_index (LongTensor): The edge indices.
+        p (float, optional): Dropout probability. (default: :obj:`0.5`)
+        force_undirected (bool, optional): If set to :obj:`True`, will either
+            drop or keep both edges of an undirected edge.
+            (default: :obj:`False`)
+        training (bool, optional): If set to :obj:`False`, this operation is a
+            no-op. (default: :obj:`True`)
+
+    :rtype: (:class:`LongTensor`, :class:`BoolTensor` or :class:`LongTensor`)
+
+    Examples:
+        >>> edge_index = torch.tensor([[0, 1, 1, 2, 2, 3],
+        ...                            [1, 0, 2, 1, 3, 2]])
+        >>> edge_index, edge_mask = dropout_edge_pyg(edge_index)
+        >>> edge_index
+        tensor([[0, 1, 2, 2],
+                [1, 2, 1, 3]])
+        >>> edge_mask # masks indicating which edges are retained
+        tensor([ True, False,  True,  True,  True, False])
+
+        >>> edge_index, edge_id = dropout_edge_pyg(edge_index,
+        ...                                    force_undirected=True)
+        >>> edge_index
+        tensor([[0, 1, 2, 1, 2, 3],
+                [1, 2, 3, 0, 1, 2]])
+        >>> edge_id # indices indicating which edges are retained
+        tensor([0, 2, 4, 0, 2, 4])
+    """
+    if p < 0. or p > 1.:
+        raise ValueError(f'Dropout probability has to be between 0 and 1 '
+                         f'(got {p}')
+
+    if not training or p == 0.0:
+        edge_mask = edge_index.new_ones(edge_index.size(1), dtype=torch.bool)
+        return edge_index, edge_mask
+
+    row, col = edge_index
+
+    edge_mask = torch.rand(row.size(0), device=edge_index.device) >= p
+
+    if force_undirected:
+        edge_mask[row > col] = False
+
+    edge_index = edge_index[:, edge_mask]
+
+    if force_undirected:
+        edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+        edge_mask = edge_mask.nonzero().repeat((2, 1)).squeeze()
+
+    return edge_index, edge_mask

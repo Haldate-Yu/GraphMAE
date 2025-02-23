@@ -322,7 +322,7 @@ class MaskAtom:
         # modify the original node feature of the masked node
         random_value = None
         if self.predefine == "random":
-            random_value = random.choices(range(0, 3), k=masked_atom_indices.shape[0])
+            random_value = random.choices(range(0, 3), k=masked_atom_indices.size())
 
         for index, atom_idx in enumerate(masked_atom_indices):
             if self.predefine == "zero":
