@@ -159,7 +159,7 @@ def main():
     parser.add_argument("--use_scheduler", action="store_true", default=False)
 
     # todo predefine pagerank method
-    parser.add_argument("--predefine", type=str, default="zero", choices=["zero", "pagerank", "random"],)
+    parser.add_argument("--predefine", type=str, default="zero", choices=["zero", "pagerank", "random"], )
     args = parser.parse_args()
     print(args)
 
@@ -220,7 +220,10 @@ def main():
         scheduler_dec = None
 
     optimizer_list = [optimizer_model, optimizer_dec_pred_atoms, optimizer_dec_pred_bonds]
-
+    temp_dir = "./checkpoints/"
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        print("Create directory:", temp_dir)
     output_file_temp = f"./checkpoints/{args.predefine}_{args.gnn_type}_{args.mask_rate}_{args.seed}"
 
     for epoch in range(1, args.epochs + 1):
