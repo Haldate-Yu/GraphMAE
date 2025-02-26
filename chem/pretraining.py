@@ -257,7 +257,7 @@ def main():
 
     if resume:
         torch.save(model.state_dict(), args.input_model_file.rsplit(".", 1)[0] + f"_resume_{args.epochs}.pth")
-    elif not args.output_model_file == "":
+    if not output_file == "":
         torch.save(model.state_dict(), output_file + ".pth")
 
 

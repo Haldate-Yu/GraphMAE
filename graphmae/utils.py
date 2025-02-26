@@ -285,7 +285,7 @@ def save_model_dict(args, model, seed=42):
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                "_" + str(args.mask_rate) + "_" + str(seed) + ".pt"
     print("file_name: {}".format(filename))
-    file_path = task_type_dir + filename
+    file_path = task_type_dir + filename.lower()
 
     print("Saving Model Dict...")
     torch.save(model.state_dict(), file_path)
@@ -293,7 +293,7 @@ def save_model_dict(args, model, seed=42):
     model_filename = args.dataset + "_" + args.encoder + "_" + args.decoder + \
                      "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                      "_" + str(args.mask_rate) + "_" + str(seed) + "_model.pt"
-    model_file_path = task_type_dir + model_filename
+    model_file_path = task_type_dir + model_filename.lower()
     print("Saving Model...")
     torch.save(model, model_file_path)
 
@@ -311,7 +311,7 @@ def load_model_dict(args, model, seed=42):
                "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                "_" + args.mask_rate + "_" + str(seed) + ".pt"
 
-    file_path = task_type_dir + filename
+    file_path = task_type_dir + filename.lower()
     if not os.path.exists(file_path):
         raise ValueError("Model file not exist!")
 
@@ -332,7 +332,7 @@ def load_model(args, model, seed=42):
                       "_" + args.feature_init_type + "_" + args.feature_mask_type + \
                       "_" + args.mask_rate + "_" + str(seed) + "_model.pt"
 
-    file_path = task_type_dir + model_file_path
+    file_path = task_type_dir + model_file_path.lower()
     if not os.path.exists(file_path):
         raise ValueError("Model file not exist!")
 

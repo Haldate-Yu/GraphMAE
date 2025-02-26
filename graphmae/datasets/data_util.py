@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
@@ -49,7 +50,12 @@ def load_dataset(dataset_name):
 
 def load_graph_classification_dataset(dataset_name, deg4feat=False):
     dataset_name = dataset_name.upper()
-    dataset = TUDataset(root="../data", name=dataset_name)
+    if dataset_name == "REDDIT-BINARY":
+        dataset_path = os.path.abspath(os.path.join(os.getcwd(), "../../..")) + "/data"
+        print("Loading REDDIT-BINARY dataset from: {}".format(dataset_path))
+        dataset = TUDataset(root=dataset_path, name=dataset_name)
+    else:
+        dataset = TUDataset(root="../data", name=dataset_name)
     dataset = list(dataset)
     graph = dataset[0]
 
