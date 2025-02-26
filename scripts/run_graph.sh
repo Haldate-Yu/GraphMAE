@@ -7,7 +7,7 @@ else
   device=$1
 fi
 
-for dataset in "IMDB-BINARY" "IMDB-MULTI" "PROTEINS" "MUTAG" "NCI1" "REDDIT-BINERY" "COLLAB"; do
+for dataset in "IMDB-BINARY" "IMDB-MULTI" "PROTEINS" "MUTAG" "NCI1" "REDDIT-BINARY" "COLLAB"; do
   for fill_method in "zero" "random"; do
     for mask_type in "uniform" "structural"; do
       python main_graph.py \
