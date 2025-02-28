@@ -295,7 +295,7 @@ def save_model_dict(args, model, seed=42):
                      "_" + str(args.mask_rate) + "_" + str(seed) + "_model.pt"
     model_file_path = task_type_dir + model_filename.lower()
     print("Saving Model...")
-    torch.save(model, model_file_path)
+    # torch.save(model, model_file_path)
 
 
 def load_model_dict(args, model, seed=42):
