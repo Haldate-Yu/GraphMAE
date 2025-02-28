@@ -7,7 +7,7 @@ else
   device=$1
 fi
 
-for dataset in "cora" "citeseer" "pubmed" "ogbn-arxiv"; do
+for dataset in "cora" "citeseer" "pubmed"; do
   for fill_method in "zero" "random"; do
     python main_transductive.py \
       --device $device \
