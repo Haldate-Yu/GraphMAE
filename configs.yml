@@ -1,10 +1,10 @@
 cora:
   lr: 0.001
   lr_f: 0.01
-  num_hidden: 512
+  num_hidden: 1024
   num_heads: 4
   num_layers: 2
-  weight_decay: 2e-4
+  weight_decay: 1e-5
   weight_decay_f: 1e-4
   max_epoch: 1500
   max_epoch_f: 300
@@ -19,18 +19,18 @@ cora:
   drop_edge_rate: 0.0
   optimizer: adam
   replace_rate: 0.05
-  alpha_l: 3
+  alpha_l: 1
   scheduler: True
   save_model: True
 citeseer:
   lr: 0.001
   lr_f: 0.01
-  num_hidden: 512
+  num_hidden: 1024
   num_heads: 2
   num_layers: 2
-  weight_decay: 2e-5
-  weight_decay_f: 0.01
-  max_epoch: 300
+  weight_decay: 1e-6
+  weight_decay_f: 1e-5
+  max_epoch: 600
   max_epoch_f: 300
   mask_rate: 0.9
   encoder: gat
