@@ -210,7 +210,7 @@ def main(args):
 if __name__ == "__main__":
     args = build_args()
     if args.use_cfg:
-        args = load_best_configs(args, "configs.yml")
+        args = load_best_configs(args, "high_missing_configs.yml")
     args.model_prefix = "graph_classification"
     print(args)
     main(args)

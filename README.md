@@ -33,8 +33,8 @@ For quick start, you could run the scripts:
 **Node classification**
 
 ```bash
-sh scripts/run_transductive.sh <dataset_name> <gpu_id> # for transductive node classification
-# example: sh scripts/run_transductive.sh cora/citeseer/pubmed/ogbn-arxiv 0
+sh scripts/run_transductive_basic.sh <dataset_name> <gpu_id> # for transductive node classification
+# example: sh scripts/run_transductive_basic.sh cora/citeseer/pubmed/ogbn-arxiv 0
 sh scripts/run_inductive.sh <dataset_name> <gpu_id> # for inductive node classification
 # example: sh scripts/run_inductive.sh reddit/ppi 0
 

@@ -159,6 +159,8 @@ if __name__ == "__main__":
     args = build_args()
     if args.use_cfg:
         args = load_best_configs(args, "configs.yml")
+    elif args.use_high_missing_cfg:
+        args = load_best_configs(args, "high_missing_configs.yml")
     args.model_prefix = "transductive"
     print(args)
     main(args)
