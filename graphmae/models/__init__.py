@@ -23,6 +23,9 @@ def build_model(args):
     concat_hidden = args.concat_hidden
     num_features = args.num_features
 
+    missing_feature_type = args.feature_mask_type
+    init_feature_method = args.feature_init_type
+
     model = PreModel(
         in_dim=int(num_features),
         num_hidden=int(num_hidden),
@@ -43,5 +46,7 @@ def build_model(args):
         replace_rate=replace_rate,
         alpha_l=alpha_l,
         concat_hidden=concat_hidden,
+        missing_feature_type=missing_feature_type,
+        init_feature_method=init_feature_method
     )
     return model
