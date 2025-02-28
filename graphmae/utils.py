@@ -98,8 +98,8 @@ def build_args():
         choices=["zero", "random"],
     )
     parser.add_argument(
-        "--feature_mask_type", type=str, help="Type of missing feature mask", default="uniform",
-        choices=["uniform", "structural"],
+        "--feature_mask_type", type=str, help="Type of missing feature mask", default="original",
+        choices=["uniform", "structural", "original"],
     )
 
     # save model args
