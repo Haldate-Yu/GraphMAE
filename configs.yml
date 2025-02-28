@@ -8,7 +8,7 @@ cora:
   weight_decay_f: 1e-4
   max_epoch: 1500
   max_epoch_f: 300
-  mask_rate: 0.5
+  mask_rate: 0.9
   encoder: gat
   decoder: gat
   activation: prelu
@@ -32,7 +32,7 @@ citeseer:
   weight_decay_f: 0.01
   max_epoch: 300
   max_epoch_f: 300
-  mask_rate: 0.5
+  mask_rate: 0.9
   encoder: gat
   decoder: gat
   activation: prelu
@@ -55,7 +55,7 @@ pubmed:
   weight_decay_f: 1e-4
   max_epoch: 1000
   max_epoch_f: 300
-  mask_rate: 0.75
+  mask_rate: 0.9
   num_layers: 2
   encoder: gat
   decoder: gat
@@ -79,7 +79,7 @@ ogbn-arxiv:
   weight_decay_f: 5e-4
   max_epoch: 1000
   max_epoch_f: 600
-  mask_rate: 0.5
+  mask_rate: 0.9
   drop_edge_rate: 0.5
   num_layers: 3
   encoder: gat
