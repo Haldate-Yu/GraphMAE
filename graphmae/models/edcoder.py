@@ -178,12 +178,12 @@ class PreModel(nn.Module):
         if self.missing_feature_type == "structural":  # either remove all of a nodes features or none
             node_mask = (torch.bernoulli(torch.Tensor([1 - mask_rate]).repeat(num_nodes)).bool().unsqueeze(1)
                          .repeat(1, num_features))
-            masked_nodes = (node_mask.sum(dim=1) > 0).nonzero(as_tuple=True)[0]
-            unmasked_nodes = (node_mask.sum(dim=1) == 0).nonzero(as_tuple=True)[0]
+            masked_nodes = (node_mask.sum(dim=1) == 0).nonzero(as_tuple=True)[0]
+            unmasked_nodes = (node_mask.sum(dim=1) > 0).nonzero(as_tuple=True)[0]
         elif self.missing_feature_type == "uniform":
             node_mask = torch.bernoulli(torch.Tensor([1 - mask_rate]).repeat(num_nodes, num_features)).bool()
             masked_nodes = (node_mask.sum(dim=1) > 0).nonzero(as_tuple=True)[0]
-            unmasked_nodes = (node_mask.sum(dim=1) == 0).nonzero(as_tuple=True)[0]
+            unmasked_nodes = (node_mask.sum(dim=1) == num_features).nonzero(as_tuple=True)[0]
         else:
             raise NotImplementedError("missing feature type {} not implemented!".format(self.missing_feature_type))
 
