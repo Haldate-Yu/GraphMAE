@@ -2,10 +2,14 @@ import torch
 import torch.nn.functional as F
 
 
-def sce_loss(x, y, alpha=3):
+def sce_loss(x, y, alpha=3, token_mask=None):
+    if token_mask is not None:
+        # only compare the masked tokens
+        x = x * ~token_mask
+        y = y * ~token_mask
+
     x = F.normalize(x, p=2, dim=-1)
     y = F.normalize(y, p=2, dim=-1)
-
     # loss =  - (x * y).sum(dim=-1)
     # loss = (x_h - y_h).norm(dim=1).pow(alpha)
 

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from torch import Tensor
 from functools import partial
 from itertools import chain
@@ -212,9 +213,23 @@ class PreModel(nn.Module):
 
             # use mask values to replace
             if self.init_feature_method == "zero":
-                out_x[token_nodes] = 0.0
+                if self.missing_feature_type == "structural":
+                    out_x[token_nodes] = 0.0
+                elif self.missing_feature_type == "uniform":
+                    # if uniform mask, we partially replace with 0
+                    token_mask = mask[token_nodes]
+                    token_x = out_x[token_nodes]
+                    token_x = torch.where(token_mask, token_x, 0.0)
+                    out_x[token_nodes] = token_x
             elif self.init_feature_method == "random":
-                out_x[token_nodes] = random_mask[token_nodes]
+                if self.missing_feature_type == "structural":
+                    out_x[token_nodes] = random_mask[token_nodes]
+                elif self.missing_feature_type == "uniform":
+                    # if uniform mask, we partially replace with random values
+                    token_mask = mask[token_nodes]
+                    token_x = out_x[token_nodes]
+                    token_x = torch.where(token_mask, token_x, random_mask[token_nodes])
+                    out_x[token_nodes] = token_x
             else:
                 raise NotImplementedError("init feature method {} not implemented!".format(self.init_feature_method))
 
@@ -224,15 +239,29 @@ class PreModel(nn.Module):
             token_nodes = mask_nodes
             # use mask values to replace
             if self.init_feature_method == "zero":
-                out_x[token_nodes] = 0.0
+                if self.missing_feature_type == "structural":
+                    out_x[token_nodes] = 0.0
+                elif self.missing_feature_type == "uniform":
+                    # if uniform mask, we partially replace with 0
+                    token_mask = mask[token_nodes]
+                    token_x = out_x[token_nodes]
+                    token_x = torch.where(token_mask, token_x, 0.0)
+                    out_x[token_nodes] = token_x
             elif self.init_feature_method == "random":
-                out_x[token_nodes] = random_mask[token_nodes]
+                if self.missing_feature_type == "structural":
+                    out_x[token_nodes] = random_mask[token_nodes]
+                elif self.missing_feature_type == "uniform":
+                    # if uniform mask, we partially replace with random values
+                    token_mask = mask[token_nodes]
+                    token_x = out_x[token_nodes]
+                    token_x = torch.where(token_mask, token_x, random_mask[token_nodes])
+                    out_x[token_nodes] = token_x
             else:
                 raise NotImplementedError("init feature method {} not implemented!".format(self.init_feature_method))
 
         out_x[token_nodes] += self.enc_mask_token
 
-        return out_x, (mask_nodes, keep_nodes)
+        return out_x, (mask_nodes, keep_nodes), mask
 
     def forward(self, x, edge_index):
         # ---- attribute reconstruction ----
@@ -241,7 +270,7 @@ class PreModel(nn.Module):
         return loss, loss_item
 
     def mask_attr_prediction(self, x, edge_index):
-        use_x, (mask_nodes, keep_nodes) = self.encoding_mask_noise(x, self._mask_rate)
+        use_x, (mask_nodes, keep_nodes), mask = self.encoding_mask_noise(x, self._mask_rate)
 
         if self._drop_edge_rate > 0:
             use_edge_index, masked_edges = dropout_edge_pyg(edge_index, self._drop_edge_rate)
@@ -258,8 +287,11 @@ class PreModel(nn.Module):
 
         if self._decoder_type not in ("mlp", "linear"):
             # * remask, re-mask
-            # todo using feature mask to remask
-            rep[mask_nodes] = 0
+            # using feature mask to remask
+            if self.missing_feature_type == "structural":
+                # if structural mask, we re-mask all masked nodes features
+                rep[mask_nodes] = 0
+                # else we DO NOT re-mask
 
         if self._decoder_type in ("mlp", "linear"):
             recon = self.decoder(rep)
@@ -267,10 +299,14 @@ class PreModel(nn.Module):
             recon = self.decoder(rep, use_edge_index)
 
         x_init = x[mask_nodes]
-
         x_rec = recon[mask_nodes]
 
-        loss = self.criterion(x_rec, x_init)
+        if self.missing_feature_type == "structural":
+            # if structural mask, we only compute loss on unmasked nodes
+            loss = self.criterion(x_rec, x_init)
+        elif self.missing_feature_type == "uniform":
+            # else we compute loss on all node with node mask
+            loss = self.criterion(x_rec, x_init, token_mask=mask)
         return loss
 
     def embed(self, x, edge_index):
