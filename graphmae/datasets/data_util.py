@@ -45,7 +45,8 @@ def load_dataset(dataset_name):
 
     num_features = dataset.num_features
     num_classes = dataset.num_classes
-    return graph, (num_features, num_classes)
+    split_idx = dataset.get_idx_split() if hasattr(graph, "get_idx_split") else None
+    return graph, (num_features, num_classes, split_idx)
 
 
 def load_graph_classification_dataset(dataset_name, deg4feat=False):

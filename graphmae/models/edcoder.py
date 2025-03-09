@@ -11,6 +11,7 @@ from .loss_func import sce_loss
 from graphmae.utils import create_norm
 from typing import Optional, Tuple
 from torch_geometric.utils import add_self_loops, remove_self_loops, dropout_edge
+from torch_geometric.typing import Adj, OptTensor
 
 
 def setup_module(m_type, enc_dec, in_dim, num_hidden, out_dim, num_layers, dropout, activation, residual, norm, nhead,
@@ -308,6 +309,37 @@ class PreModel(nn.Module):
             # else we compute loss on all node with node mask
             loss = self.criterion(x_rec, x_init, token_mask=mask)
         return loss
+
+    def missing_attr_prediction(self, x: Tensor, edge_index: Adj, mask: Tensor, mask_type: str):
+        use_x = x.clone()
+        return_x = x.clone()
+
+        # if self._drop_edge_rate > 0:
+        #     use_edge_index, masked_edges = dropout_edge(edge_index, self._drop_edge_rate)
+        #     use_edge_index = add_self_loops(use_edge_index)[0]
+        # else:
+        #     use_edge_index = edge_index
+
+        enc_rep, all_hidden = self.encoder(use_x, edge_index, return_hidden=True)
+        if self._concat_hidden:
+            enc_rep = torch.cat(all_hidden, dim=1)
+
+        # ---- attribute reconstruction ----
+        rep = self.encoder_to_decoder(enc_rep)
+
+        # if self._decoder_type not in ("mlp", "linear"):
+            # * remask, re-mask
+            # rep[~mask] = 0
+
+        if self._decoder_type in ("mlp", "linear"):
+            recon = self.decoder(rep)
+        else:
+            recon = self.decoder(rep, edge_index)
+
+        # only fill masked nodes
+        return_x[~mask] = recon[~mask]
+
+        return return_x
 
     def embed(self, x, edge_index):
         rep = self.encoder(x, edge_index)

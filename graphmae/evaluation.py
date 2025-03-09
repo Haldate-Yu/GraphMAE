@@ -1,9 +1,28 @@
+import time
 import copy
+import logging
 import torch
 import torch.nn as nn
+from torch_geometric.data import NeighborSampler
 from tqdm import tqdm
 
-from graphmae.utils import create_optimizer, accuracy
+from graphmae.utils import create_optimizer, accuracy, get_missing_feature_mask
+from missing_feature_process.data_utils import set_train_val_test_split
+from missing_feature_process.models import get_model
+from missing_feature_process.train_node import train_node
+from ogb.nodeproppred import PygNodePropPredDataset, Evaluator
+
+from missing_feature_process.train_node import test_node
+
+
+class LogisticRegression(nn.Module):
+    def __init__(self, num_dim, num_class):
+        super().__init__()
+        self.linear = nn.Linear(num_dim, num_class)
+
+    def forward(self, x, edge_index, *args):
+        logits = self.linear(x)
+        return logits
 
 
 def node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
@@ -93,11 +112,113 @@ def linear_probing_for_transductive_node_classiifcation(model, graph, feat, opti
     return test_acc, estp_test_acc
 
 
-class LogisticRegression(nn.Module):
-    def __init__(self, num_dim, num_class):
-        super().__init__()
-        self.linear = nn.Linear(num_dim, num_class)
+def missing_feature_node_classification_evaluation(args, seed, model, graph, split_idx, x, num_classes,
+                                                   lr_f, weight_decay_f,
+                                                   max_epoch_f, device,
+                                                   mute=False):
+    model.eval()
+    num_finetune_params = [p.numel() for p in model.parameters() if p.requires_grad]
+    if not mute:
+        print(f"num parameters for finetuneing: {sum(num_finetune_params)}")
 
-    def forward(self, x, edge_index, *args):
-        logits = self.linear(x)
-        return logits
+    split_idx = split_idx
+    n_nodes, n_features = graph.x.shape
+    num_classes = num_classes
+    train_loader = (
+        NeighborSampler(
+            graph.edge_index,
+            node_idx=split_idx["train"],
+            sizes=[15, 10, 5][: args.downstream_num_layers],
+            batch_size=args.downstream_batch_size,
+            shuffle=True,
+            num_workers=12,
+        )
+        if args.downstream_graph_sampling
+        else None
+    )
+    inference_loader = (
+        NeighborSampler(
+            graph.edge_index, node_idx=None, sizes=[-1], batch_size=4096, shuffle=False, num_workers=12,
+        )
+        if args.downstream_graph_sampling
+        else None
+    )
+
+    data = (set_train_val_test_split(
+        seed=seed, data=graph, split_idx=split_idx, dataset_name=args.dataset, )
+            .to(device))
+    if args.dataset in ["ogbn_arxiv", "ogbn-products"]:
+        evaluator = Evaluator(name=args.dataset)
+    else:
+        evaluator = None
+
+    missing_feature_mask = (get_missing_feature_mask(
+        rate=args.mask_rate, n_nodes=n_nodes, n_features=n_features, type=args.feature_mask_type, )
+                            .to(device))
+    x = data.x.clone()
+    if args.feature_init_type == "zero":
+        x[~missing_feature_mask] = float(0)
+    elif args.feature_init_type == "random":
+        init_x = torch.randn_like(x)
+        x[~missing_feature_mask] = init_x[~missing_feature_mask]
+    else:
+        raise ValueError(f"{args.feature_init_type} not implemented!")
+
+    if args.downstream_model in ["gcnmf", "pagnn"]:
+        filled_features = torch.full_like(x, float("nan"))
+    else:
+        # use GraphMAE to fill missing features
+        if args.feature_mask_type == "structural":
+            mask_node_ids = torch.where(missing_feature_mask.sum(dim=1) == 0)[0]
+        elif args.feature_mask_type == "uniform":
+            mask_node_ids = torch.where(missing_feature_mask.sum(dim=1) != missing_feature_mask.shape[1])[0]
+        else:
+            raise ValueError(f"{args.feature_mask_type} not implemented!")
+
+        node_mask = torch.ones(x.shape[0], dtype=torch.bool)
+        node_mask[mask_node_ids] = False
+        filled_features = model.missing_attr_prediction(x, data.edge_index, node_mask, args.feature_mask_type).detach()
+        # set a threshold?
+        filled_features[filled_features < 0] = 0
+
+    downstream_model = get_model(
+        model_name=args.downstream_model,
+        num_features=data.num_features,
+        num_classes=num_classes,
+        edge_index=data.edge_index,
+        x=x,
+        mask=missing_feature_mask,
+        args=args,
+    ).to(device)
+    downstream_params = list(downstream_model.parameters())
+
+    optimizer = torch.optim.Adam(downstream_params, lr=lr_f, weight_decay=weight_decay_f)
+    criterion = torch.nn.NLLLoss()
+
+    epoch_test_acc = 0
+    best_val_acc = 0
+    best_model = None
+    for epoch in range(0, max_epoch_f):
+        x = torch.where(missing_feature_mask, data.x, filled_features)
+        train_node(
+            downstream_model, x, data, optimizer, criterion, train_loader=train_loader, device=device,
+        )
+        (train_acc, val_acc, epoch_test_acc), out = test_node(
+            downstream_model, x=x, data=data, evaluator=evaluator, inference_loader=inference_loader, device=device,
+        )
+        if epoch == 0 or val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_model = copy.deepcopy(downstream_model)
+        if epoch > args.patience:
+            break
+        if not mute:
+            print(
+                f"Epoch {epoch + 1} - Train acc: {train_acc:.3f}, Val acc: {val_acc:.3f}, Test acc: {epoch_test_acc:.3f}"
+            )
+    best_model.eval()
+    (train_acc, val_acc, tmp_test_acc), out = test_node(
+        best_model, x=x, data=data, evaluator=evaluator, inference_loader=inference_loader, device=device,
+    )
+    if not mute:
+        print(f"Final Test acc: {tmp_test_acc:.3f}")
+    return epoch_test_acc, tmp_test_acc

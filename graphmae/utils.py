@@ -84,6 +84,8 @@ def build_args():
     parser.add_argument("--save_model", action="store_true")
     parser.add_argument("--use_cfg", action="store_true")
     parser.add_argument("--use_high_missing_cfg", action="store_true")
+    parser.add_argument("--use_downstream_cfg", action="store_true")
+    parser.add_argument("--use_downstream_high_missing_cfg", action="store_true")
     parser.add_argument("--logging", action="store_true")
     parser.add_argument("--scheduler", action="store_true", default=False)
     parser.add_argument("--concat_hidden", action="store_true", default=False)
@@ -105,6 +107,28 @@ def build_args():
 
     # save model args
     parser.add_argument("--model_prefix", type=str, help="Save Model folder prefix")
+
+    # for downstream gnns
+    parser.add_argument(
+        "--downstream_model",
+        type=str,
+        help="Type of model to make a prediction on the downstream task",
+        default="gcn",
+        choices=["mlp", "sgc", "sage", "gcn", "gat", "gcnmf", "pagnn", "lp"],
+    )
+    parser.add_argument("--patience", type=int, help="Patience for early stopping", default=200)
+    parser.add_argument("--downstream_hidden_dim", type=int, help="Hidden dimension of model", default=64)
+    parser.add_argument("--downstream_num_layers", type=int, help="Number of GNN layers", default=3)
+    parser.add_argument("--downstream_dropout", type=float, help="Feature dropout", default=0.5)
+    parser.add_argument("--downstream_jk", action="store_true", help="Whether to use the jumping knowledge scheme")
+    parser.add_argument(
+        "--downstream_batch_size", type=int, help="Batch size for models trained with neighborhood sampling", default=1024,
+    )
+    parser.add_argument(
+        "--downstream_graph_sampling",
+        help="Set if you want to use graph sampling (always true for large graphs)",
+        action="store_true",
+    )
 
     args = parser.parse_args()
     return args

@@ -4,7 +4,7 @@ import torch
 from tqdm import tqdm
 
 from graphmae.datasets.data_util import load_dataset
-from graphmae.evaluation import node_classification_evaluation
+from graphmae.evaluation import node_classification_evaluation, missing_feature_node_classification_evaluation
 from graphmae.models import build_model
 from graphmae.utils import (
     build_args,
@@ -18,11 +18,15 @@ from graphmae.utils import (
     load_model_dict,
     load_model
 )
+import warnings
+
+# ignore user warnings
+warnings.filterwarnings("ignore")
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 
 
-def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f,
+def pretrain(seed, model, graph, split_idx, feat, optimizer, max_epoch, device, scheduler, num_classes, lr_f, weight_decay_f,
              max_epoch_f, linear_prob, logger=None):
     logging.info("start training..")
     graph = graph.to(device)
@@ -46,9 +50,12 @@ def pretrain(model, graph, feat, optimizer, max_epoch, device, scheduler, num_cl
             logger.note(loss_dict, step=epoch)
 
         if (epoch + 1) % 200 == 0:
-            # todo check if this is correct
-            node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
-                                           linear_prob, mute=True)
+            # todo replace to missing feature graph
+            # node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f, max_epoch_f, device,
+            #                                linear_prob, mute=True)
+            missing_feature_node_classification_evaluation(args, seed, model, graph, split_idx, x, num_classes, lr_f,
+                                                           weight_decay_f, max_epoch_f,
+                                                           device, linear_prob)
 
     # return best_model
     return model
@@ -79,7 +86,7 @@ def main(args):
     logs = args.logging
     use_scheduler = args.scheduler
 
-    graph, (num_features, num_classes) = load_dataset(dataset_name)
+    graph, (num_features, num_classes, split_idx) = load_dataset(dataset_name)
     args.num_features = num_features
 
     acc_list = []
@@ -124,7 +131,7 @@ def main(args):
         #     raise ValueError(f"{args.feature_init_type} not implemented!")
 
         if not load_model:
-            model = pretrain(model, graph, x, optimizer, max_epoch, device, scheduler, num_classes, lr_f,
+            model = pretrain(seed, model, graph, split_idx, x, optimizer, max_epoch, device, scheduler, num_classes, lr_f,
                              weight_decay_f, max_epoch_f, linear_prob, logger)
             model = model.cpu()
 
@@ -139,9 +146,13 @@ def main(args):
 
         model = model.to(device)
         model.eval()
-
-        final_acc, estp_acc = node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f,
-                                                             max_epoch_f, device, linear_prob)
+        # evaluate on test set
+        # final_acc, estp_acc = node_classification_evaluation(model, graph, x, num_classes, lr_f, weight_decay_f,
+        #                                                      max_epoch_f, device, linear_prob)
+        final_acc, estp_acc = missing_feature_node_classification_evaluation(args, seed, model, graph, split_idx, x, num_classes,
+                                                                             lr_f, weight_decay_f,
+                                                                             max_epoch_f, device,
+                                                                             linear_prob)
         acc_list.append(final_acc)
         estp_acc_list.append(estp_acc)
 
@@ -161,6 +172,10 @@ if __name__ == "__main__":
         args = load_best_configs(args, "configs.yml")
     elif args.use_high_missing_cfg:
         args = load_best_configs(args, "high_missing_configs.yml")
+    elif args.use_downstream_cfg:
+        args = load_best_configs(args, "downstream_configs.yml")
+    elif args.use_downstream_high_missing_cfg:
+        args = load_best_configs(args, "downstream_high_missing_configs.yml")
 
     args.model_prefix = "transductive"
     print(args)
